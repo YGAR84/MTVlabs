@@ -1,0 +1,31 @@
+var n : int;
+var x : int;
+var y : int;
+
+{
+	var q: int; 
+	var b : [[int]];
+	var t : int;
+	
+	((A t (q <= t)) & false)
+}
+
+{
+	n := 16;
+	x := 0;
+	y := 0;
+	while (y <= n)
+	{
+		y := (y + (x + (x + 1)));
+		x := (x + 1)
+	}
+	{
+		(x >= 40)
+	};
+	x := (x - 1);
+	print(x)
+}
+
+{
+	(true & false)
+}

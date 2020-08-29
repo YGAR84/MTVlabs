@@ -1,0 +1,11 @@
+var a: [int];
+var b: [int];
+var c: [[int]];
+var d: int;
+
+0: a = upd(a, 3, 7) goto {1};
+1: b = upd(a, 3, 6) goto {2};
+2: print(app(a, 3)) goto {3};
+3: print(app(b, 3)) goto {4};
+4: c = upd(c, 0, b) goto {5};
+5: print(app(app(c, 0), 3)) goto {7};

@@ -1,0 +1,19 @@
+import string;
+import ds/array;
+
+fib_t(n:int, acc:ref[int])->[int]{
+	if (n <= 2) ^acc
+	else fib_t(n - 1, {
+			refArrayPush(acc, (^acc)[length(^acc) - 1] + (^acc)[length(^acc) - 2]);
+			acc
+		});
+}
+
+fib(n:int)->[int]
+{
+	fib_t(n, ref[0, 1]);
+}
+
+main() {
+	println(fib(100));
+}

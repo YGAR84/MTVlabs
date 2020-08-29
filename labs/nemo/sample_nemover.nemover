@@ -1,0 +1,33 @@
+var x : int;
+var y : int;
+var z : [int];
+var k : int;
+
+{
+	true
+}
+
+{
+	x := 10;
+	y := 0;
+	z := upd(z, 0, 1);
+	z := upd(z, 1, 1);
+	
+	while( y < x )
+	{
+		if( y >= 2) z := upd(z, y, (app(z, (y - 1)) + app(z, (y - 2))))
+		else z := z;
+		
+		print(app(z, y));
+		y := (y + 1)
+	}
+	{
+		( ( ( (x == 10) & (app(z, 0) == 1)) & (app(z , 1) == 1) ) & (A k (  ( (k >= 2) & (k < 3) ) -> ( app(z, k) == ( app(z, (k - 1)) + app(z, (k - 2) ) ) ))))
+	};
+	
+	print(z)
+}
+
+{
+	(A k ( ( (k >= 2) & (k < x) ) -> ( app(z, k) == ( app(z, (k - 1)) + app(z, (k - 2))))) )
+}

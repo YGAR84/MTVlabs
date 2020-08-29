@@ -1,0 +1,92 @@
+346 isSameStructType$init
+399 flow$init
+413 flow
+428 flow$init
+433 redirectAdditionalFn$init
+463 redirectAdditionalFn$1
+484 redirectAdditionalFn
+490 concat$init
+523 fold$init
+552 extractStruct$init
+575 extractStruct
+599 extractStruct$1
+661 extractStruct
+677 extractStruct$init
+682 loggingEnabled$init
+704 securityModes$init
+728 isOWASPLevel1$init
+751 isOWASPLevel1
+791 isOWASPLevel1$init
+796 isLoggingEnabled$init
+822 isLoggingEnabled
+844 isLoggingEnabled$init
+849 println2$init
+885 localStorageEnabled$init
+912 println$init
+929 println
+971 println$init
+976 fib$init
+989 fib
+1169 fib$init
+1174 main$init
+1188 main
+1210 main$init
+
+0 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\ds\tuples.flow 7 1
+39 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\ds\tuples.flow 3 1
+77 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\ds\tuples.flow 5 1
+141 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\ds\tuples.flow 4 1
+191 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\dynamic.flow 10 2
+217 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\maybe.flow 9 1
+234 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\maybe.flow 10 1
+261 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\ds\list.flow 11 2
+296 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\ds\list.flow 9 2
+318 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\securitymode.flow 5 2
+346 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\dynamic.flow 5 1
+399 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\dynamic.flow 28 0
+413 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\dynamic.flow 29 1
+427 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\dynamic.flow 30 0
+458 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\net\url.flow 25 66
+490 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\ds\array.flow 10 1
+523 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\ds\array.flow 34 1
+552 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\flowstructs.flow 38 0
+575 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\flowstructs.flow 39 5
+629 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\flowstructs.flow 41 2
+645 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\flowstructs.flow 42 2
+655 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\flowstructs.flow 43 8
+676 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\flowstructs.flow 44 0
+701 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\securitymode.flow 33 28
+722 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\securitymode.flow 17 37
+728 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\securitymode.flow 19 0
+751 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\securitymode.flow 20 1
+790 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\securitymode.flow 21 0
+796 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\securitymode.flow 39 0
+822 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\securitymode.flow 40 1
+843 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\securitymode.flow 41 0
+849 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\runtime.flow 155 1
+909 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\runtime.flow 412 22
+912 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\runtime.flow 156 1
+929 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\runtime.flow 157 2
+949 D:\Downloads\Ucheba\MTV\flow9\flow9\lib\runtime.flow 158 11
+976 D:\Downloads\Ucheba\MTV\flow9\fibonaci.flow 4 0
+989 D:\Downloads\Ucheba\MTV\flow9\fibonaci.flow 5 1
+1024 D:\Downloads\Ucheba\MTV\flow9\fibonaci.flow 6 6
+1055 D:\Downloads\Ucheba\MTV\flow9\fibonaci.flow 7 6
+1091 D:\Downloads\Ucheba\MTV\flow9\fibonaci.flow 9 2
+1113 D:\Downloads\Ucheba\MTV\flow9\fibonaci.flow 10 8
+1168 D:\Downloads\Ucheba\MTV\flow9\fibonaci.flow 11 0
+1174 D:\Downloads\Ucheba\MTV\flow9\fibonaci.flow 15 0
+1188 D:\Downloads\Ucheba\MTV\flow9\fibonaci.flow 17 8
+1234 --end-- 0 -1
+
+L 413 1 0 i
+L 463 1 0 url
+L 463 1 1 fn
+L 575 1 0 a
+L 575 1 1 e
+L 599 1 0 acc
+L 599 1 1 el
+L 599 0 2 t
+L 929 1 0 str
+L 989 1 0 n
+L 989 0 1 x

@@ -1,0 +1,21 @@
+import string;
+import ds/array;
+
+NumInd( ind:int, num:int);
+
+f(a:[int], m:int)->[Pair<int,int>]{
+
+	
+	b = fold(a, [], \acc, n -> concat(acc, [NumInd(length(acc), n)]));
+	
+	fold(b, [], \acc, x -> 
+			fold(b, acc, \bcc, y -> 
+					if(x.num + y.num == m)	concat(bcc, [Pair(x.ind, y.ind)]) 
+					else bcc )
+				)
+		
+}
+
+main() {
+	println(f([1,2,3,4,5,6], 9));
+}

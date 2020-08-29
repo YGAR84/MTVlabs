@@ -1,0 +1,12 @@
+S = plus|minus|neg|mult|divide|int|var;
+ws = " "*;
+plus = "(" ws S:l ws "+" ws S:r ws ")" { AlgPlus(:l, :r)};
+minus = "(" ws S:l ws "-" ws S:r ws ")" { AlgMinus(:l, :r)};
+mult = "(" ws S:l ws "*" ws S:r ws ")"{ AlgMult(:l, :r)};
+divide = "(" ws S:l ws "/" ws S:r ws ")"{ AlgDiv(:l, :r)};
+neg = "(" ws "-" ws S:v ws ")" {AlgNeg(:v)};
+int = digit+ $s { ArInt(s2i($s))};
+var = letter+ $s { ArVar($s)};
+digit = '0' - '9';
+letter = 'a' - 'z';
+

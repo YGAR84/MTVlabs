@@ -1,0 +1,22 @@
+var x : int;
+var y : int;
+
+{
+	(true & false)
+}
+
+{
+	x := 30;
+	y := 20;
+	print(x);
+	print(y);
+	while(x >= y) y := (y + 1)
+	{
+		(x <= y)
+	}
+	
+}
+
+{
+	(x >= (y + y))
+}

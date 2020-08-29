@@ -1,0 +1,12 @@
+S = plus|minus|unarminus|mult|divide|exponent|int|var;
+ws = " "*;
+plus = "(" ws S:l ws "+" ws S:r ws ")" { ArPlus(:l, :r)};
+minus = "(" ws S:l ws "-" ws S:r ws ")" { ArMinus(:l, :r)};
+mult = "(" ws S:l ws "*" ws S:r ws ")"{ ArMult(:l, :r)};
+divide = "(" ws S:l ws "/" ws S:r ws ")"{ ArDiv(:l, :r)};
+exponent = "(" ws S:l ws "^" ws S:r ws ")" { ArEx(:l, :r)};
+int = digit+ $s { ArInt(s2i($s))};
+var = letter+ $s { ArVar($s)};
+digit = '0' - '9';
+letter = 'a' - 'z';
+

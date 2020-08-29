@@ -1,0 +1,43 @@
+prog = ws decl*:d ws state*:s { VMProg(:d, :s)};
+
+decl = ws "var" ws word:v ws ":" ws type:t ws ";" ws { VMDecl(:v, :t) };
+
+type = intType | arrayType;
+
+intType = "int" { VMIntType() };
+arrayType = "[" ws type:t ws "]" { VMArrayType(:t) };
+
+expr = int | app | upd | binOp | var ;
+
+int = ws number:n { VMInt(:n) };
+
+var = ws word:w { VMVar(:w) };
+
+binOp = ws "(" ws expr:e1 ws algOp:s ws expr:e2 ws ")" ws { VMBinOp(:s, :e1, :e2) };
+
+app = ws "app" ws "(" ws expr:e1 ws "," ws expr:e2 ws ")" ws { VMApp(:e1, :e2) };
+
+upd = ws "upd" ws "(" ws expr:e1 ws "," ws expr:e2 ws "," ws expr:e3 ws ")" { VMUpd(:e1, :e2, :e3) };
+
+state = assign | cond | print;
+
+assign = ws number:n ws ":" ws word:l ws "=" ws expr:r ws goto:goto ws ";" ws { VMAssign(:n, :l, :r, :goto) };
+
+cond = ws number:n ws ":" ws "if" ws "(" ws expr:e1 ws  boolOp:b ws expr:e2 ws ")" ws goto:goto1 ws "else" ws goto:goto2 ws ";" ws { VMCond(:n, :b, :e1, :e2, :goto1, :goto2) };
+
+print = ws number:n ws ":" ws "print" ws "(" ws expr:e ws ")" ws "goto" ws "{" ws numSeq:goto ws "}" ws ";" ws { VMPrint(:n, :e, :goto) };
+
+
+goto = "goto" ws "{" ws numSeq:n ws "}" { :n };
+
+numSeq = (((number:n ws "," ws {:n})*:bb ws number:aa { buildArray(:bb, :aa) }) | (number?:n { :n}));
+
+
+number = digit+ $s { s2i($s) };
+word = letter+ $s { $s };
+digit = '0' - '9';
+letter = 'a' - 'z';
+ws = (' ' | '\n' | '\r' | '\t' )*;
+
+boolOp = ("==" | "<=" | ">=" | "<" | ">" | "!=") $s { $s };
+algOp = ("+" | "*" | "/" | "-" | "%") $s { $s };

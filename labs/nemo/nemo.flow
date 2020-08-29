@@ -1,0 +1,141 @@
+import string;
+import lingo/pegcode/driver;
+import VM;
+import ds/tree;
+import math/math;
+import runtime;
+
+
+export
+{
+	NemoProg(decl: [VMDecl], body: NemoBody);
+
+	NemoExpr ::= NemoInt, NemoApp, NemoUpd, NemoUnOp, NemoBinOp, NemoVar;
+	NemoInt(val: int);
+	NemoApp(arr: NemoExpr, ind: NemoExpr);
+	NemoUpd(arr: NemoExpr, ind: NemoExpr, val: NemoExpr);
+	NemoUnOp(expr: NemoExpr);
+	NemoBinOp(op: string, lhs: NemoExpr, rhs: NemoExpr);
+	NemoVar(name: string);
+
+	NemoBody ::= NemoSeq, NemoPrint, NemoTest, NemoPar, NemoIter, NemoAssign;
+	NemoSeq(bodies: [NemoBody]);
+	NemoPrint(expr: NemoExpr);
+	NemoTest(op: string, lhs: NemoExpr, rhs: NemoExpr);
+	NemoPar(bodies: [NemoBody]);
+	NemoIter(body: NemoBody);
+	NemoAssign(name: string, expr: NemoExpr);
+	
+	s2nemo(s: string) -> NemoProg;
+	
+	antiBoolOp(op: string) -> string;
+}
+
+
+antiBoolOp(op: string) -> string 
+{
+	if(op == "==")
+	{
+		"!="
+	}
+	else if(op == "<=")
+	{
+		">"
+	}
+	else if(op == ">=")
+	{
+		"<"
+	}
+	else if(op == "<")
+	{
+		">="
+	}
+	else if(op == ">")
+	{
+		"<="
+	}
+	else if(op == "!=")
+	{
+		"=="
+	}
+	else
+	{
+		""
+	}
+}
+
+s2nemo(s: string) -> NemoProg
+{
+	gr = "#include nemoGrammar.flow";
+	parsic(compilePegGrammar(gr), s, 
+		SemanticActions(
+			mergeTree(defaultPegActions.t,
+				pairs2tree([
+					Pair("buildPar", \bodies -> NemoPar(concat([bodies[0]], bodies[1])
+					)),
+					Pair("buildSeq", \bodies -> NemoSeq(concat([bodies[0]], bodies[1])
+					)),
+					Pair("buildIfElse", \bodies -> NemoPar([
+							NemoSeq([NemoTest(bodies[0], bodies[1], bodies[2]), bodies[3]]),
+							NemoSeq([NemoTest(antiBoolOp(bodies[0]), bodies[1], bodies[2]), bodies[4]])])
+					),
+					Pair("buildWhile", \bodies -> NemoSeq([
+							NemoIter(NemoSeq([NemoTest(bodies[0], bodies[1], bodies[2]), bodies[3]])),
+							NemoTest(antiBoolOp(bodies[0]), bodies[1], bodies[2])])
+					)
+				])
+			)
+		)
+	)
+}
+
+
+nemoExpr2s(nemoExpr: NemoExpr) -> string
+{
+	switch(nemoExpr)
+	{
+		NemoVar(v) : v;
+		NemoInt(v) : i2s(v);
+		NemoApp(a, i) : "app(" + nemoExpr2s(a) + ", " + nemoExpr2s(i) + ")";
+		NemoUpd(a, i, v) : "upd(" + nemoExpr2s(a) + ", " + nemoExpr2s(i) + ", " + nemoExpr2s(v) + ")";
+		NemoUnOp(e) : "( - " + nemoExpr2s(e) + ")";
+		NemoBinOp(op, l, r) : "(" + nemoExpr2s(l) + " " + op + " " + nemoExpr2s(r) + ")";
+	}
+}
+
+// nemoBody2s(nemoBody: NemoBody) -> string
+// {
+	// switch(nemoBody)
+	// {
+		// NemoSeq(bs) : "{\n" + strGlue(map(bs, nemoBody2s), ";\n") + "\n}";
+		// NemoPrint(e) : "print(" + nemoBody2s(e) + ")"
+		// NemoTest(o, l, r) : "(" + nemoExpr2s(l) + " " + op + " " + nemoExpr2s(r) + ")?";
+		// NemoPar(bs) : "{\n" + strGlue(map(bs, nemoBody2s), "|\n") + "\n}";
+		// NemoIter(b) : "*{ " + nemoBody2s(b) + " }";
+		// NemoAssign(n, e) : n + " := " + nemoExpr2s(e);
+	// }
+// }
+
+
+// nemoProg2s(nemoProg: NemoProg) -> string 
+// {
+	// declsString = strGlue(map(nemoProg.decl, \v ->
+	// {
+		// "var " + v.var + " : " + vmType2s(v.type) + ";"
+	// }, "\n");
+	
+	// bodyString = nemoBody2s(nemoProg.body);
+	
+	// declsString + "\n\n" + bodyString;
+// }
+
+
+
+// main()
+// {
+// //	nemoProgText = getFileContent("test1.nemo");
+	// nemoProgText = getFileContent("nemoTest1.txt");
+	// println(nemoProgText);
+	// nemoProg = s2nemo(nemoProgText);
+	// println(nemoProg);
+// }

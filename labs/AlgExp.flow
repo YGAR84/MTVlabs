@@ -1,0 +1,683 @@
+import string;
+import lingo/pegcode/driver;
+import ds/tree;
+import math/math;
+
+AlgExp ::= AlgPlus, AlgMinus, AlgMult, AlgDiv, AlgInt, AlgVar, AlgNeg;
+AlgPlus(lhs: AlgExp, rhs: AlgExp);
+AlgMinus(lhs: AlgExp, rhs: AlgExp);
+AlgMult(lhs: AlgExp, rhs: AlgExp);
+AlgDiv(lhs: AlgExp, rhs: AlgExp);
+AlgVar(var: string);
+AlgInt(val: int);
+AlgNeg(lhs:AlgExp);
+
+RatNum(num: int, den: int);
+
+sumRatNum(r1: RatNum, r2: RatNum) -> RatNum{
+	newNum = r1.num * r2.den + r2.num * r1.den;
+	newDen = r1.den * r2.den;
+	if(newNum == 0) RatNum(0, 1)
+	else {
+		gcdnum = gcd(newNum, newDen);
+		RatNum(newNum/gcdnum, newDen/gcdnum);
+	}
+}
+
+
+multRatNum(r1: RatNum, r2: RatNum) -> RatNum{
+	newNum = r1.num * r2.num;
+	newDen = r1.den * r2.den;
+	gcdnum = gcd(newNum, newDen);
+	RatNum(newNum/gcdnum, newDen/gcdnum);
+}
+
+
+PolyMult(mult: Tree<string, int>);
+PolySum(sum: Tree<PolyMult, int>);
+RatFunc(nominator: PolySum, denominator: PolySum);
+
+getParam(mb1 : Maybe<RatNum>, mb2 : Maybe<RatNum>)->Maybe<Pair<RatNum, RatNum>>
+{
+	if(isSome(mb1) && isSome(mb2)) 
+	{
+		v1 = either(mb1, RatNum(0, 0));
+		v2 = either(mb2, RatNum(0, 0));
+		Some(Pair(v1, v2))
+	}
+	else None()
+}
+
+sumPolySum(p1: PolySum, p2: PolySum) -> PolySum 
+{
+	PolySum(
+		filterTree(
+			mergeTreeCustom(p1.sum, p2.sum, \k, v1, v2 ->{
+				v1 + v2;
+			})
+		, \k, v -> {!(v == 0)})
+	)
+}
+
+negPolySum(p: PolySum)->PolySum
+{
+	PolySum
+	(
+		foldTree(p.sum, TreeEmpty(), \k, v, acc -> 
+		{
+			mergeTree(acc, makeTree1(k, 0 - v))
+		})
+	)
+}
+
+negRatFunc(f1: RatFunc) -> RatFunc 
+{
+	RatFunc( negPolySum(f1.nominator), f1.denominator )
+}
+
+createPolySum(pm: PolyMult, ratNum: int)->PolySum 
+{
+	PolySum(makeTree1(pm, ratNum))
+}
+
+multPolySum(p1: PolySum, p2: PolySum) -> PolySum 
+{
+	PolySum(
+		filterTree(
+			foldTree(p1.sum, TreeEmpty(), \k1, v1, acc1 -> {
+				mergeTreeCustom(acc1, 
+					foldTree(p2.sum, TreeEmpty(), \k2, v2, acc2 -> 
+					{
+						multi = PolyMult(mergeTreeCustom(k1.mult, k2.mult, \kk, vv1, vv2 -> { vv1 + vv2}))
+						mergeTreeCustom(acc2, makeTree1(multi, v1 * v2), \kk, vv1, vv2 -> { vv1 + vv2 })
+					}), 
+				 \kk, vv1, vv2 -> { vv1 + vv2} )
+			})
+			, \k, v -> {!(v == 0)}
+		)
+	)
+}
+
+// bcdForPolySum(p1: PolySum, p2: PolySum) -> PolyMult {
+	
+	// common1 = commonFactForSum(p1);
+	// common2 = commonFactForSum(p2);
+	// commonFactForMult(common1, common2)
+// }
+
+reduceRatFunc(rf: RatFunc) -> RatFunc
+{
+	nomCom = commonFactForSum(rf.nominator);
+	denCom = commonFactForSum(rf.denominator);
+	nomRest = dividePolySum(rf.nominator, nomCom);
+	denRest = dividePolySum(rf.denominator, denCom);
+
+	comsCom = commonFactForFacts(nomCom, denCom);
+	nomComRest = dividePolySum(nomCom, comsCom);
+	denComRest = dividePolySum(denCom, comsCom);
+
+	// println("-----------------------");
+	// println("rf: " + ratFunc2s(rf));
+	// println("nomCom: " + polySum2s(nomCom));
+	// println("denCom: " + polySum2s(denCom));
+	// println("nomRest: " + polySum2s(nomRest));
+	// println("denRest: " + polySum2s(denRest));
+	// println("comsCom: " + polySum2s(comsCom));
+	// println("nomComRest: " + polySum2s(nomComRest));
+	// println("nomComRest: " + polySum2s(denComRest));
+	// println("-----------------------");
+	
+	if(nomRest == denRest)
+	{
+		RatFunc(nomComRest, denComRest);
+	}
+	else if(nomRest == negPolySum(denRest))
+	{
+		negRatFunc(RatFunc(nomComRest, denComRest));
+	}
+	else
+	{
+		multRatFunc(RatFunc(nomRest, denRest), RatFunc(nomComRest,denComRest))
+	}
+}
+
+commonFactForSum(p: PolySum)->PolySum
+{
+	PolySum(makeTree1(commonFactPolyMultForSum(p), commonFactNumForSum(p)));
+}
+
+commonFactPolyMultForSum(p: PolySum) -> PolyMult 
+{
+	if (p.sum == TreeEmpty()) PolyMult(TreeEmpty())
+	else 
+	{
+		firstPoly = (tree2pairs(p.sum))[0];
+		
+		polyMultTree = foldTree(firstPoly.first.mult, firstPoly.first.mult, \k, v, acc -> 
+		{
+			foldTree(p.sum, acc, \k1, v1, acc1 -> 
+			{
+				v2 = lookupTreeDef(k1.mult, k, 0);
+				mergeTreeCustom(acc1, makeTree1(k, if (v2 > v) v else v2), \k2, vv1, vv2 -> 
+				{
+					if (vv1 > vv2) vv2
+					else vv1
+				})
+
+			})
+		})
+	
+		PolyMult(filterTree(polyMultTree, \k, v -> { !(v == 0)}))
+	}
+}
+
+commonFactNumForSum(p: PolySum) -> int
+{
+	if (p.sum == TreeEmpty()) 1
+	else {
+		foldTree(p.sum, 0, \k, v, acc -> 
+		{
+			if(acc == 0) iabs(v)
+			else gcd(acc, iabs(v))
+		})
+	}
+}
+
+commonFactForFacts(p1: PolySum, p2: PolySum) -> PolySum
+{
+	if(p1.sum == TreeEmpty() || p2.sum == TreeEmpty()) PolySum(makeTree1(PolyMult(TreeEmpty()), 1))
+	else
+	{
+		psp1 = (tree2pairs(p1.sum))[0];
+		psp2 = (tree2pairs(p2.sum))[0];
+		
+		resultNum = gcd(psp1.second, psp2.second);
+
+		resultMult = foldTree(psp1.first.mult, psp1.first.mult, \k, v, acc -> 
+		{
+			v2 = lookupTreeDef(psp2.first.mult, k, 0);
+			mergeTreeCustom(acc, makeTree1(k, if(v2 > v) v else v2), \kk, vv1, vv2 -> 
+			{
+				if(vv1 > vv2) vv2 else vv1
+			})
+		})
+		
+		PolySum(makeTree1(PolyMult(filterTree(resultMult, \k, v -> {!(v == 0)})), resultNum));
+	}
+}
+
+dividePolySum(pnum: PolySum, pden: PolySum) -> PolySum
+{
+	psp = (tree2pairs(pden.sum))[0];
+	denNum = psp.second;
+	denMult = psp.first.mult;
+	PolySum
+	(
+		foldTree(pnum.sum, TreeEmpty(), \k, v, acc ->
+		{
+			mergeTree
+			(
+				acc,
+				makeTree1
+				( 
+					PolyMult
+					(
+						filterTree
+						(
+							mergeTreeCustom(k.mult, denMult, \kk, vv1, vv2 -> 
+							{
+								vv2 - vv1;
+							})
+							, \k1, v1 -> {!(v1 == 0)}
+						)
+							
+					),
+					 v/denNum
+				)
+			)
+		})
+	)
+}
+
+
+sumRatFunc(f1: RatFunc, f2: RatFunc) -> RatFunc 
+{
+	nom1 = multPolySum(f1.nominator, f2.denominator);
+	nom2 = multPolySum(f2.nominator, f1.denominator);
+	den = multPolySum(f1.denominator, f2.denominator);
+	RatFunc(sumPolySum(nom1, nom2), den);
+}
+
+multRatFunc(f1: RatFunc, f2: RatFunc) -> RatFunc 
+{
+	RatFunc(multPolySum(f1.nominator, f2.nominator), multPolySum(f1.denominator, f2.denominator));
+}
+
+divRatFunc(f1: RatFunc, f2: RatFunc) -> RatFunc 
+{
+	multRatFunc(f1, RatFunc(f2.denominator, f2.nominator));
+}
+
+alg2rat(e:AlgExp) -> RatFunc
+{
+	switch(e)
+	{
+		AlgPlus(l, r):
+		{
+			sumRatFunc(alg2rat(l), alg2rat(r));
+		}
+		AlgMinus(l, r):
+		{
+			sumRatFunc(alg2rat(l), negRatFunc(alg2rat(r)));
+		}
+		AlgMult(l, r):
+		{
+			multRatFunc(alg2rat(l), alg2rat(r));
+		}
+		AlgDiv(l, r):
+		{
+			divRatFunc(alg2rat(l), alg2rat(r));
+		}
+		AlgVar(v):
+		{
+			RatFunc(PolySum(makeTree1(PolyMult(makeTree1(v, 1)), 1)), PolySum(makeTree1(PolyMult(TreeEmpty()), 1)));
+		}
+		AlgInt(v):
+		{
+			RatFunc(PolySum(makeTree1(PolyMult(TreeEmpty()), v)), PolySum(makeTree1(PolyMult(TreeEmpty()), 1)));
+		}
+		AlgNeg(l):
+		{
+			negRatFunc(alg2rat(l));
+		}
+	}
+}
+
+alg2i(e: AlgExp, var_vals: Tree<string, int>) -> Maybe<RatNum> 
+{
+	switch(e)
+	{
+		AlgPlus(l, r):
+		{
+			switch(getParam(alg2i(l, var_vals), alg2i(r, var_vals)))
+			{
+				Some(v) : Some(sumRatNum(v.first, v.second));
+				None(): None();
+			}
+		}
+		AlgMinus(l, r):
+		{
+			switch(getParam(alg2i(l, var_vals), alg2i(r, var_vals)))
+			{
+				Some(v) : Some(sumRatNum(v.first, RatNum(0 - v.second.num, v.second.den)));
+				None(): None();
+			}
+		}
+		AlgMult(l, r): 
+		{
+			switch(getParam(alg2i(l, var_vals), alg2i(r, var_vals)))
+			{
+				Some(v) : Some(multRatNum(v.first, v.second));
+				None(): None();
+			}
+		}
+		AlgDiv(l, r): 
+		{
+			switch(getParam(alg2i(l, var_vals), alg2i(r, var_vals)))
+			{
+				Some(v): 
+				{
+					if(v.second.num == 0) None()
+					else Some(multRatNum(v.first, RatNum(v.second.den, v.second.num)));
+				}
+				None(): None();
+			}
+		}
+		AlgNeg(v): 
+		{
+			switch(alg2i(v, var_vals))
+			{
+				Some(a) : Some(RatNum(0 - a.num, a.den));
+				None(): None();
+			}
+		}
+		AlgInt(v): Some(RatNum(v, 1));
+		AlgVar(v): maybeBind(lookupTree(var_vals, v), \a -> { Some(RatNum(a, 1))});
+	}
+}
+
+alg2s(e: AlgExp) -> string 
+{
+	switch(e)
+	{
+		AlgPlus(l, r): "(" + alg2s(l) + "+" + alg2s(r) + ")";
+		AlgMinus(l, r): "(" + alg2s(l) + "-" + alg2s(r) + ")";
+		AlgMult(l, r): "(" + alg2s(l) + "*" + alg2s(r) + ")";
+		AlgDiv(l, r): "(" + alg2s(l) + "/" + alg2s(r) + ")";
+		AlgNeg(v): "(" + "-" + alg2s(v) + ")";
+		AlgInt(v): i2s(v);
+		AlgVar(v): v;
+	}
+}
+
+s2ar(s: string) -> AlgExp 
+{
+	gr = "#include ../AlgExpGrammar.flow";
+	parsic(compilePegGrammar(gr), s, defaultPegActions)
+}
+
+diff(e: AlgExp, var: string) -> AlgExp {
+	switch(e)
+	{
+		AlgPlus(l, r): AlgPlus(diff(l, var), diff(r, var));
+		AlgMinus(l, r): AlgMinus(diff(l, var), diff(r, var));
+		AlgMult(l, r): AlgPlus(AlgMult(diff(l, var), r), AlgMult(l, diff(r, var)));
+		AlgDiv(l,r) : AlgDiv(AlgMinus(AlgMult(diff(l, var), r), AlgMult(l, diff(r, var))), AlgMult(r, r))
+		AlgNeg(v) : AlgNeg(diff(v, var));
+		AlgInt(v) : AlgInt(0);
+		AlgVar(v) : if(v == var) AlgInt(1) else AlgInt(0);  
+	}
+}
+
+reduceAlgExp(e:AlgExp) -> AlgExp{
+	switch(e)
+	{
+		AlgPlus(l, r):
+		{
+			newL = reduceAlgExp(l);
+			newR = reduceAlgExp(r);
+			
+			if(newR == AlgInt(0))	newL
+			else if(newL == AlgInt(0)) newR
+			else AlgPlus(newL, newR);
+		}
+		AlgMinus(l, r):
+		{
+			newL = reduceAlgExp(l);
+			newR = reduceAlgExp(r);
+			
+			if(newR == AlgInt(0))	newL
+			else if(newL == AlgInt(0))	AlgNeg(newR)
+			else AlgMinus(newL, newR);
+		}
+		AlgMult(l, r):
+		{
+			newL = reduceAlgExp(l);
+			newR = reduceAlgExp(r);
+			
+			if(newR == AlgInt(0))	AlgInt(0)
+			else if(newL == AlgInt(0))	AlgInt(0)
+			else if(newR == AlgInt(1)) newL
+			else if(newL == AlgInt(1)) newR
+			else if(newR == AlgInt(-1)) AlgNeg(newL)
+			else if(newL == AlgInt(-1)) AlgNeg(newR)
+			else AlgMult(newL, newR);
+		}
+		AlgDiv(l, r):
+		{
+			newL = reduceAlgExp(l);
+			newR = reduceAlgExp(r);
+			if(newR == AlgInt(1)) newL
+			else 	AlgDiv(newL, newR);
+		}
+		AlgNeg(v):
+		{
+			newV = reduceAlgExp(v);
+			
+			switch(newV)
+			{
+				AlgNeg(v1): v1;
+				AlgInt(v1): AlgInt(0 - v1);
+				default: AlgNeg(newV);
+			}
+		}
+		AlgVar(v): AlgVar(v);
+		AlgInt(v): AlgInt(v);
+	}
+}
+
+match(e: AlgExp, pattern: AlgExp)->Maybe<Tree<string,AlgExp>>
+{
+	matchWithSubst(e, pattern, makeTree())
+}
+
+matchWithSubst(e: AlgExp, pattern: AlgExp, subst: Tree<string, AlgExp>) -> Maybe<Tree<string, AlgExp>>
+{
+	apply = \l1,r1,l2,r2 ->
+	{
+		match1 = matchWithSubst(l2,l1, subst);
+		switch(match1)
+		{
+			Some(s1) : matchWithSubst(r2,r1, s1);
+			None(): None();
+		}
+	}
+	
+	
+	switch(pattern)
+	{
+		AlgPlus(l1, r1):
+		{
+			switch(e)
+			{
+				AlgPlus(l2, r2): apply(l1,r1,l2,r2);
+				default: None();
+			}
+		}
+		AlgMinus(l1, r1):
+		{
+			switch(e)
+			{
+				AlgMinus(l2, r2): apply(l1,r1,l2,r2);
+				default: None();
+			}
+		}
+		AlgMult(l1, r1):
+		{
+			switch(e)
+			{
+				AlgMult(l2, r2): apply(l1,r1,l2,r2);
+				default: None();
+			}
+		}
+		AlgDiv(l1, r1):
+		{
+			switch(e)
+			{
+				AlgDiv(l2, r2): apply(l1,r1,l2,r2);
+				default: None();
+			}
+		}
+		AlgNeg(v1):
+		{
+			switch(e)
+			{
+				AlgNeg(v2): match(v2, v1)
+				default: None();
+			}
+		}
+		AlgVar(v1):
+		{
+			switch(lookupTree(subst, v1))
+			{
+				Some(v):
+				{
+					if(v == e) Some(subst)
+					else None();
+				}
+				None():
+				{
+					Some(setTree(subst, v1, e));
+				}
+			}
+		}
+		AlgInt(v1):
+		{
+			switch(e)
+			{
+				AlgInt(v2): if (v1 == v2) Some(subst) else None();
+				default: None();
+			}
+		}
+	}
+}
+
+polyMult2s(pm: PolyMult) -> string
+{
+	pairsPolyMult = tree2pairs(pm.mult);
+	if(length(pairsPolyMult) == 0) "1"
+	else 
+	{
+		
+	foldi(pairsPolyMult, "", \i, acc, v -> {
+			polyMultStr =  acc + v.first + "^" + i2s(v.second);
+			if(i == length(pairsPolyMult) - 1) polyMultStr
+			else polyMultStr + " * "
+		})
+	}
+}
+
+polySum2s(ps: PolySum)->string
+{
+	pairsPolySum = tree2pairs(ps.sum);
+	"(" +
+	foldi(pairsPolySum, "", \i, acc, v -> {
+		polySumStr = acc + i2s(v.second) + " * " + polyMult2s(v.first);
+		if(i == length(pairsPolySum) - 1) polySumStr
+		else polySumStr + " + "
+		
+	})+
+	")"
+}
+
+ratFunc2s(rf: RatFunc)->string 
+{
+	polySum2s(rf.nominator) + "/" + polySum2s(rf.denominator)
+}
+
+main()
+{
+
+	a = AlgDiv(AlgMult(AlgNeg(AlgNeg(AlgInt(2))), AlgVar("a")), AlgVar("b"));
+	b = AlgPlus(AlgMult(a, a), AlgNeg(a));
+	// b = diff(a, "a");
+	// println(a);
+	// println(alg2s(b));
+	
+	// c = reduceAlgExp(b);
+	// println(alg2s(c));
+	
+	// d = AlgDiv(AlgInt(4), AlgInt(2));
+	// println(d);
+	// println(alg2i(d, TreeEmpty()));
+	println("-----------");
+	
+	c = AlgMinus(AlgDiv(AlgMinus(AlgMult(AlgMult(AlgInt(9), AlgVar("x")), AlgVar("x")), AlgInt(4)), AlgPlus(AlgMult(AlgInt(3), AlgVar("x")), AlgInt(2))), AlgMult(AlgInt(3), AlgVar("x")));
+	
+//	println(alg2s(c));
+
+	
+	
+	d = AlgMult(AlgMinus(AlgMult(AlgMult(AlgInt(4), AlgVar("a")), AlgVar("a")), AlgInt(9)), AlgMinus(AlgDiv(AlgInt(1), AlgMinus(AlgMult(AlgInt(2), AlgVar("a")), AlgInt(3))),AlgDiv(AlgInt(1), AlgPlus(AlgMult(AlgInt(2), AlgVar("a")), AlgInt(3)))));
+	
+//	println(alg2s(d));
+
+	cRat = alg2rat(c);
+	println(ratFunc2s(cRat));
+	
+	dRat = alg2rat(d);
+	println(ratFunc2s(dRat));
+	
+	eRat = alg2rat(AlgMult(c, AlgVar("x")));
+	println(ratFunc2s(eRat));
+	
+	fRat = alg2rat(AlgDiv(AlgMult(c, AlgVar("x")), AlgVar("y")));
+	println(ratFunc2s(fRat));
+	
+//	common1 = commonFactForSum(dRat.nominator);
+//	common2 = commonFactForSum(dRat.denominator);
+//	println(polySum2s(common1));
+//	println(polySum2s(common2));
+//	dividednom = dividePolySum(dRat.nominator, common1);
+//	println(polySum2s(dividednom));
+//	common3 = commonFactForFacts(common1, common2);
+//	println(polySum2s(common3));
+	
+	cRatRed = reduceRatFunc(cRat);
+	dRatRed = reduceRatFunc(dRat);
+	eRatRed = reduceRatFunc(eRat);
+	fRatRed = reduceRatFunc(fRat);
+
+	println(ratFunc2s(cRatRed));
+	println(ratFunc2s(dRatRed));
+	println(ratFunc2s(eRatRed));
+	println(ratFunc2s(fRatRed));
+	 println("-----------");
+
+	// println(alg2s(a));
+	// println(ratFunc2s(alg2rat(a)));
+	// println(alg2s(b));
+	// println(ratFunc2s(alg2rat(b)));
+	
+	// println("-----------");
+	// tr1 = setTreeValues(makeTree(), [Pair("a", 2), Pair("b", 10)]);
+	// p1 = createPolySum(PolyMult(tr1), 1 );
+	// tr2 = setTreeValues(makeTree(), [Pair("a", 2), Pair("b", 10), Pair("c", 3)]);
+	// p2 = createPolySum(PolyMult(tr2), 1);
+
+	// ps1 = sumPolySum(p1, p2);
+	// ps2 = multPolySum(p1, p2);
+	// println(polySum2s(ps1));
+	// println(polySum2s(ps2));
+	// //println(bcdForPolySum(p1, p2));
+	// rf1 = RatFunc(p1, p2);
+	// rf2 = RatFunc(p2, p1);
+	// println(ratFunc2s(rf1));
+	// println(ratFunc2s(rf2));
+	
+	// srf = sumRatFunc(rf1, rf2);
+	// println(ratFunc2s(srf));
+	
+	// mrf = multRatFunc(rf1, rf2);
+	
+	// println(ratFunc2s(mrf));
+	
+	// println("------------");
+	// println(polyMult2s(commonFactForSum(ps1)));
+	// //srfNomCom = commonFactForSum(srf.nominator);
+	// println(polyMult2s(srfNomCom));
+	// //srfDenCom = commonFactForSum(srf.denominator);
+	// println(polyMult2s(srfDenCom));
+	// println(polyMult2s(commonFactForSum(mrf.nominator)));
+	// println(polyMult2s(commonFactForSum(mrf.denominator)));
+	// println("------------");
+	
+	// srfCom = commonFactForMult(srfNomCom, srfDenCom);
+	// println(polyMult2s(srfCom));
+	
+	// println("------------");
+//	e1 = AlgPlus(AlgMult(AlgVar("a"), AlgVar("b")), AlgDiv(AlgVar("a"), AlgVar("b")));
+	
+//	patt = AlgPlus(AlgVar("c"), AlgVar("d"));
+//	println(match(e, patt));
+
+}
+
+
+
+
+// negRatFunc(f1: RatFunc) -> RatFunc 
+// {
+	// switch(f1)
+	// {
+		// case PolyMult(m): {f1;}
+		// case PolySum(s): 
+		// {
+			// sum = foldTree(s, TreeEmpty(), \k, v, acc -> {
+				// mergeTree(acc, makeTree1(k, RatNum(0 - v.num, v.den)))
+			// });
+			// PolySum(sum);
+		// }
+	// }
+// }
+

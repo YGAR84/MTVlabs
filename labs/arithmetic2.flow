@@ -1,0 +1,125 @@
+import string;
+import lingo/pegcode/driver;
+
+ArExp ::= ArPlus, ArMinus, ArMult, ArDiv, ArEx, ArInt, ArVar;
+ArPlus(lhs: ArExp, rhs: ArExp);
+ArMinus(lhs: ArExp, rhs: ArExp);
+ArMult(lhs: ArExp, rhs: ArExp);
+ArDiv(lhs: ArExp, rhs: ArExp);
+ArEx(lhs: ArExp, rhs: ArExp);
+ArVar(var: string);
+ArInt(val: int);
+
+
+expon(num: int, exponent: int) -> int 
+{
+	if(exponent == 0) 1
+	else expon(num, exponent - 1) * num
+}
+
+getParam(mb1 : Maybe<int>, mb2 : Maybe<int>)->Maybe<Pair<int, int>>
+{
+	if(isSome(mb1) && isSome(mb2)) 
+	{
+		v1 = either(mb1, -1);
+		v2 = either(mb2, -1);
+		Some(Pair(v1, v2))
+	}
+	else None()
+}
+
+ar2i(e: ArExp, vars: Tree<string, int>) -> Maybe<int> 
+{
+	switch(e){
+		ArPlus(l, r):
+		{
+			switch(getParam(ar2i(l, vars), ar2i(r, vars)))
+			{
+				Some(v) : Some(v.first + v.second);
+				None(): None();
+			}
+		}
+		ArMinus(l, r):
+		{
+			switch(getParam(ar2i(l, vars), ar2i(r, vars)))
+			{
+				Some(v) : Some(v.first - v.second);
+				None(): None();
+			}
+		}
+		ArMult(l, r): 
+		{
+			switch(getParam(ar2i(l, vars), ar2i(r, vars)))
+			{
+				Some(v) : Some(v.first * v.second);
+				None(): None();
+			}
+		}
+		ArDiv(l, r): 
+		{
+			switch(getParam(ar2i(l, vars), ar2i(r, vars)))
+			{
+				Some(v) : 
+				{
+					if (v.second == 0) { println("Dividing by 0"); None() }
+					else Some(v.first / v.second)
+				};
+				None(): None();
+			}
+		}
+		ArEx(l, r): 
+		{
+			switch(getParam(ar2i(l, vars), ar2i(r, vars)))
+			{
+				Some(v) : 
+				{
+					if(v.second < 0) { println("Exponention by " + i2s(v.second)); None() }
+					else Some(expon(v.first,v.second))
+				};
+				None(): None();
+			}
+		}
+		ArInt(v): Some(v);
+		ArVar(v): lookupTree(vars, v);
+	}
+}
+
+ar2s(e: ArExp) -> string 
+{
+	switch(e)
+	{
+		ArPlus(l, r): "(" + ar2s(l) + "+" + ar2s(r) + ")";
+		ArMinus(l, r): "(" + ar2s(l) + "-" + ar2s(r) + ")";
+		ArMult(l, r): "(" + ar2s(l) + "*" + ar2s(r) + ")";
+		ArDiv(l, r): "(" + ar2s(l) + "/" + ar2s(r) + ")";
+		ArEx(l, r): "(" + ar2s(l) + "^" + ar2s(r) + ")";
+		ArInt(v): i2s(v);
+		ArVar(v): v;
+	}
+}
+
+s2ar(s: string) -> ArExp 
+{
+	gr = "#include ../Grammar2.flow";
+	parsic(compilePegGrammar(gr), s, defaultPegActions)
+}
+
+
+printRes(res : Maybe<int>) -> string
+{
+	switch(res)
+	{
+		Some(v): i2s(v);
+		None(): "Error";
+	}
+}
+
+main()
+{
+	a = ArEx(ArMult(ArVar("aaa"), ArPlus(ArInt(1), ArMult(ArInt(2), ArInt(3)))), ArInt(2));
+	println(printRes(ar2i(a, makeTree1("aaa", 4))));
+	println(ar2s(a));
+	expreshion = s2ar("((aaa * (1 /   ( 3 - aaa )))^(aaa - 1 ))");
+	println(ar2s(expreshion));
+	println(printRes(ar2i(expreshion, makeTree1("aaa", 4))));
+}

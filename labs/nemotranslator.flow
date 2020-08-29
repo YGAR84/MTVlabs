@@ -1,0 +1,268 @@
+import string;
+import lingo/pegcode/driver;
+import nemovm;
+
+NemoProg(decl: [Declaration], body: NemoBody);
+
+NemoExpr ::= NemoInt, NemoApp, NemoUpd, NemoUnOp, NemoBinOp, NemoVar;
+NemoInt(value: int);
+NemoVar(name: string);
+
+NemoBinOp(op: string, lhs: NemoExpr, rhs: NemoExpr);
+NemoUnOp(expr: NemoExpr);
+
+NemoApp(arr: NemoExpr, ind: NemoExpr);
+NemoUpd(arr: NemoExpr, ind: NemoExpr, val: NemoExpr);
+
+NemoBody ::= NemoPrint, NemoTest, NemoSeq, NemoParallel, NemoIterate, NemoAssign;
+NemoPrint(expr: NemoExpr);
+NemoTest(cond: NemoExpr);
+NemoSeq(bodies: [NemoBody]);
+NemoParallel(bodies: [NemoBody]);
+NemoIterate(body: NemoBody);
+NemoAssign(var: string, expr: NemoExpr);
+
+nemo2vm(prog : NemoProg) -> Programm
+{
+	tree = fold(prog.decls, makeTree(), \acc, decl ->
+	{
+		if (containsKeyTree(acc, decl.var))
+		{
+			println("symbol redifined: " + decl.var);
+		}
+		setTree(acc, decl.var, decl.type)
+	})
+
+	Programm(prog.decl, body2vm(prog.body, 0, tree))
+}
+
+getLastLabel(labels : [int]) -> int
+{
+	l = len(labels)
+	if (l == 0) -1
+	else labels[l - 1]
+}
+
+findMaxLabel(instructions : [Instruction]) -> int
+{
+	fold(instructions, -1, \acc, inst ->
+	{
+		if (inst.)
+	})
+}
+
+
+
+body2vm(body : NemoBody, currentLabel : int, vars : Tree<string, VMType>) -> [Instruction]
+{
+	switch (body)
+	{
+		NemoPrint(expr):
+		{
+			[Instruction(currentLabel, Print(nemoExpr2vmExpr(expr, vars), [currentLabel + 1]))]
+		}
+		NemoTest(cond):
+		{
+			[Instruction(currentLabel, Cond(nemoExpr2vmExpr(cond, vars), [currentLabel + 1], []))]
+		}
+		NemoSeq(bodies):
+		{
+			fold(bodies, [], \acc, body ->
+			{
+				concat(acc, body2vm())
+			})
+		}
+		NemoParallel(bodies)
+		{
+			fold(bodies, Pair([], currentLabel + 1), \acc, body ->
+			{
+				subInst = body2vm(body);
+				concat(acc, N)
+			})
+		}
+		NemoIterate(body)
+		{
+
+		}
+		NemoAssign(var, expr)
+		{
+
+		}
+	}
+}
+
+isArray(type : VMType) -> bool
+{
+	switch (type)
+	{
+		IntType(): false
+		ArrayType(subtype): true
+	}
+}
+
+ArrayElemType(type : VMType) -> Maybe<VMType>
+{
+	switch (type)
+	{
+		IntType(): None()
+		ArrayType(subtype): subtype
+	}
+}
+
+exprType(expr : NemoExpr, vars : Tree<string, VMType>) -> Maybe<VMType>
+{
+	switch (expr)
+	{
+		NemoInt(i):
+		{
+			Some(IntType())
+		}
+		NemoApp(arr, ind):
+		{
+			if (exprType(arr) != ArrayType() || exprType(ind) != IntType())
+			{
+				None()
+			}
+
+			Some(Apply(nemoExpr2vmExpr(arr), nemoExpr2vmExpr(arr)))
+		}
+		NemoUpd(arr, ind, newVal):
+		{
+			if (exprType(arr) != ArrayType() || exprType(ind) != IntType() || exprType(ind) != IntType())
+			{
+				None()
+			}
+
+			Some(Update(nemoExpr2vmExpr(arr), nemoExpr2vmExpr(ind), nemoExpr2vmExpr(newVal)))
+		}
+		NemoUnOp(expr):
+		{
+			Some(IntType())
+		}
+		NemoBinOp(op, lhs, rhs):
+		{
+			Some(IntType())
+		}
+		NemoVar(name):
+		{
+			lookupTree(name)
+		}
+	}
+
+}
+
+nemoExpr2vmExpr(expr : NemoExpr, vars : Tree<string, VMType>) -> Maybe<Expression>
+{
+	switch (expr)
+	{
+		NemoInt(i):
+		{
+			Some(Int(i))
+		}
+		NemoApp(arr, ind):
+		{
+			if (!isArray(exprType(arr, vars)) || exprType(ind, vars) != IntType())
+			{
+				None()
+			}
+
+			Some(Apply(nemoExpr2vmExpr(arr, vars), nemoExpr2vmExpr(arr, vars)))
+		}
+		NemoUpd(arr, ind, newVal):
+		{
+			if (!isArray(exprType(arr, vars)) || exprType(ind, vars) != IntType())
+			{
+				None()
+			}
+
+			switch(ArrayElemType(arr))
+			{
+				Some(sub):
+				{
+					if (sub == exprType(newVal))
+					{
+						Some(Update(nemoExpr2vmExpr(arr, vars), nemoExpr2vmExpr(ind, vars), nemoExpr2vmExpr(newVal, vars)))
+					}
+					None()
+				}
+				None(): None()
+			}
+		}
+		NemoUnOp(expr):
+		{
+			if (exprType(expr, vars) != IntType())
+			{
+				None()
+			}
+
+			Some(BinOp("-", Int(0), nemoExpr2vmExpr(expr, vars)))
+		}
+		NemoBinOp(op, lhs, rhs):
+		{
+			if (exprType(lhs, vars) != IntType() || exprType(rhs, vars) != IntType())
+			{
+				None()
+			}
+
+			Some(BinOp(op, nemoExpr2vmExpr(lhs, vars), nemoExpr2vmExpr(rhs, vars)))
+		}
+		NemoVar(name):
+		{
+			switch (lookupTree(name))
+			{
+				Some(type): Some(Var(name))
+				None(): None() 
+			}
+		}
+	}
+}
+
+s2nemo(s: string) -> NemoProg
+{
+	gr = "#include nemoGrammar.flow";
+	parsic(compilePegGrammar(gr), s, 
+		SemanticActions(
+			mergeTree(defaultPegActions.t,
+				pairs2tree([
+					Pair("buildSeq", \bodies -> NemoSeq(concat3([bodies[0]], [bodies[1]], bodies[2]))
+					),
+					Pair("buildParallel", \bodies -> NemoParallel(concat3([bodies[0]], [bodies[1]], bodies[2]))
+					),
+					// Pair("buildSeq", \bodies -> NemoSeq(concat([bodies[0]], bodies[1]))
+					// ),
+					// Pair("buildParallel", \bodies -> NemoParallel(concat([bodies[0]], bodies[1]))
+					// ),
+					Pair("buildIfElse", \bodies -> NemoParallel([
+							NemoSeq([NemoTest(bodies[0]), bodies[1]]),
+							NemoSeq([NemoTest(NemoBinOp("==", NemoInt(0), bodies[0])), bodies[1]])])
+					),
+					Pair("buildWhile", \bodies -> NemoSeq([
+							NemoIterate(NemoSeq([NemoTest(bodies[0]), bodies[1]])),
+							NemoTest(NemoBinOp("==", NemoInt(0), bodies[0]))])
+					),
+				])
+			)
+		)
+	)
+}
+// seq = ws "{" ws body:b1 ws ";" ws body:b2 ws next*:bs "}" ws { buildSeq(:b1, :b2, :bs)};
+// next = ";" ws body ws;
+
+// parallel = ws "{" ws body:b1 ws "|" ws body:b2 ws opt*:br ws "}" ws { buildParallel(:b1, :b2, :br) };
+// opt = "|" ws body ws;
+
+// seq = ws "{" ws body:b1 ws next+:bs "}" ws { buildSeq(:b1, :bs)};
+// next = ";" ws body ws;
+
+// parallel = ws "{" ws body:b1 ws opt+:bo ws "}" ws { buildParallel(:b1, :bo) };
+// opt = "|" ws body ws;
+
+
+main()
+{
+	nemoProgText = getFileContent("test1.nemo");
+//	nemoProgText = getFileContent("nemoTest1.txt");
+	println(nemoProgText);
+	nemoProg = s2nemo(nemoProgText);
+	println(nemoProg);
+}

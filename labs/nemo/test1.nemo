@@ -1,0 +1,9 @@
+var v : int;
+var n : int;
+{
+	n := 10
+	*{v := v + 1 | v := v - 1}
+	(v * v <= n)? 
+	((v + 1) * (v + 1) > n)?
+	print(v)
+}

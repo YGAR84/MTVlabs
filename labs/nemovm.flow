@@ -1,0 +1,581 @@
+import string;
+import lingo/pegcode/driver;
+import ds/tree;
+import math/math;
+import maybe;
+import runtime;
+
+Declaration(var: string, type: VMType);
+VMType ::= IntType, ArrayType;
+IntType();
+ArrayType(type: VMType);
+
+NemoVariable ::= Int, Array;
+Array(arrayOf: [NemoVariable]);
+ 
+Expression ::= Int, Var, BinOp, App, Upd;
+Int(value: int);
+Var(name: string);
+
+App(ar: Expression, ind: Expression);
+Upd(ar: Expression, ind: Expression, value: Expression);
+
+BinOp(op: string, lhs: Expression, rhs: Expression);
+
+Instruction(label: int, state: State);
+State ::= Assign, Cond, Print;
+Assign(v: string, r: Expression, Goto: [int]);
+Cond(cond: Expression, trueGoto: [int], falseGoto: [int]);
+Print(v: Expression, Goto: [int]);
+
+Programm(decl: [Declaration], instructions: [Instruction]);
+
+s2nem(s: string) -> Programm 
+{
+	gr = "#include nemovmGrammar.flow";
+	parsic(compilePegGrammar(gr), s, defaultPegActions)
+}
+
+AssignInstruction(assigment : Assign, vars : Tree<string, NemoVariable>) -> Maybe<Tree<string, NemoVariable>>
+{
+	newVal = GetNemoVarFromExpr(assigment.r, vars);
+	maybeBind(newVal, \val -> Some(setTree(vars, assigment.v, val)))
+}
+
+ConditionInstruction(cond : Cond, vars : Tree<string, NemoVariable>) -> Maybe<[int]>
+{
+	maybeBind(GetIntFromNemoVar(GetNemoVarFromExpr(cond.cond, vars)), \val ->
+	if (val != 0)
+	{
+		Some(cond.trueGoto)
+	}
+	else
+	{
+		Some(cond.falseGoto)
+	})
+}
+
+PrintInstruction(printArg : Expression, vars : Tree<string, NemoVariable>) -> Maybe<bool>
+{
+	maybeBind(GetNemoVarFromExpr(printArg, vars), \val ->
+	{
+		println(val);
+		Some(true)
+	})
+}
+
+GetVarByType(vmtype: VMType) -> NemoVariable
+{
+	switch (vmtype)
+	{
+		IntType(): Int(0);
+		ArrayType(arrayOf):
+		{
+			var = GetVarByType(arrayOf);
+			switch (var)
+			{
+				Int(v): Array([]);
+				Array(arr): Array([var]);
+			}
+		}
+	}
+}
+
+GetDefault(var : NemoVariable) -> NemoVariable
+{
+	switch (var)
+	{
+		Int(i): Int(0)
+		Array(arr):
+		{
+			if (length(arr) > 0)
+			{
+				Array([GetDefault(arr[0])])
+			}
+			else
+			{
+				Array([Int(0)])
+			}
+		}
+	}
+}
+
+GetArrayDefaultElement(arr : NemoVariable) -> NemoVariable
+{
+	switch (GetDefault(arr))
+	{
+		Int(v): Int(v)
+		Array(array): array[0]
+	}
+}
+
+DeclareVariables(decl : [Declaration]) -> Tree<string, NemoVariable>
+{
+	fold(decl, makeTree(), \acc, declStatement ->
+	{
+		setTree(acc, declStatement.var, GetVarByType(declStatement.type));
+	})
+}
+
+// b2i(b : bool) -> int
+// {
+// 	if (b) 1
+// 	else 0
+// }
+
+
+
+Compute(binOp : BinOp, vars : Tree<string, NemoVariable>) -> Maybe<int>
+{
+	leftNemoVar = GetNemoVarFromExpr(binOp.lhs, vars);
+	rightNemoVar = GetNemoVarFromExpr(binOp.rhs, vars);
+	left = GetIntFromNemoVar(leftNemoVar);
+	right = GetIntFromNemoVar(rightNemoVar);
+
+	if (binOp.op == "==")
+	{
+		switch (maybeBind2(\a, b -> Some(a == b))(left, right))
+		{
+			Some(res): Some(b2i(res))
+			None():
+			{
+				Some(b2i(leftNemoVar == rightNemoVar))
+			}
+		}
+	}
+	else if (binOp.op == "<=")
+	{
+		maybeBind2(\a, b -> Some(b2i(a <= b)))(left, right)
+	}
+	else if (binOp.op == ">=")
+	{
+		maybeBind2(\a, b -> Some(b2i(a >= b)))(left, right)
+	}
+	else if (binOp.op == "<")
+	{
+		maybeBind2(\a, b -> Some(b2i(a < b)))(left, right)
+	}
+	else if (binOp.op == ">")
+	{
+		maybeBind2(\a, b -> Some(b2i(a > b)))(left, right)
+	}
+	else if (binOp.op == "+")
+	{
+		maybeBind2(\a, b -> Some(a + b))(left, right)
+	}
+	else if (binOp.op == "*")
+	{
+		maybeBind2(\a, b -> Some(a * b))(left, right)
+	}
+	else if (binOp.op == "/")
+	{
+		maybeBind2(\a, b ->	Some(a / b))(left, right)
+	}
+	else if (binOp.op == "-")
+	{
+		maybeBind2(\a, b -> Some(a - b))(left, right)
+	}
+	else if (binOp.op == "%")
+	{
+		maybeBind2(\a, b -> Some(a % b))(left, right)
+	}
+	else
+	{
+		println("undefined symbol: " + binOp.op);
+		None()
+	}
+}
+
+GetNemoVarFromExpr(expr : Expression, vars : Tree<string, NemoVariable>) -> Maybe<NemoVariable>
+{
+	switch (expr)
+	{
+		Int(i):
+		{
+			Some(Int(i))
+		}
+		Var(name):
+		{
+			lookupTree(vars, name)
+		}
+		App(app, ind):
+		{
+			Apply(App(app, ind), vars)
+		}
+		BinOp(binOp, lhs, rhs):
+		{
+			switch (Compute(BinOp(binOp, lhs, rhs), vars))
+			{
+				Some(intval): Some(Int(intval))
+				None(): None()
+			}
+		}
+		Upd(upd, ind, val):
+		{
+			Update(Upd(upd, ind, val), vars)
+		}
+	}
+	None()
+}
+
+GetIntFromNemoVar(nemoVar : Maybe<NemoVariable>) -> Maybe<int>
+{
+	maybeBind(nemoVar, \val -> 
+	{
+		switch (val)
+		{
+			Int(i): Some(i)
+			Array(arr): None()
+		}
+	})
+}
+
+/*GetArrFromNemoVar(nemoVar : NemoVariable, vars : Tree<string, NemoVariable>) -> Maybe<Array>
+{
+	switch (nemoVar)
+	{
+		Int(i): None()
+		Array(arr): Some(Array(arr))
+	}
+}
+*/
+
+GetArray(ar : Expression, vars : Tree<string, NemoVariable>) -> Maybe<[NemoVariable]>
+{
+	switch (ar)
+	{
+		Var(name):
+		{
+			switch (lookupTree(vars, name))
+			{
+				Some(nemovar):
+				{
+					switch (nemovar)
+					{
+						Array(arr):
+						{
+							Some(arr)
+						}
+						default:
+						{
+							println("type mismatch: apply requires array");
+							None()
+						}
+					}
+				}
+				default:
+				{
+					println("undefined symbol: " + name);
+					None()
+				}
+			}
+		}
+		default:
+		{
+			println("apply argument is not variable");
+			None()
+		}
+	}
+
+}
+
+FillWithValues(deepth : int, val : NemoVariable) -> [NemoVariable]
+{
+	if (deepth > 0)
+	{
+		concat([val], FillWithValues(deepth - 1, val))
+	}
+	else
+	{
+		[val]
+	}
+}
+
+Update(upd : Upd, vars : Tree<string, NemoVariable>) -> Maybe<NemoVariable>
+{
+	switch (GetArray(upd.ar, vars))
+	{
+		Some(arr):
+		{
+			index = GetIntFromNemoVar(GetNemoVarFromExpr(upd.ind, vars));
+			newVal = GetNemoVarFromExpr(upd.value, vars);			
+
+			maybeBind2(\i, val ->
+			{
+				if (length(arr) > i && i >= 0)
+				{
+					Some(Array(foldi(arr, [], \ind, acc, prevVal ->
+					{
+						if (ind == i)
+						{
+							concat(acc, [val])
+						}
+						else
+						{
+							concat(acc, [prevVal])
+						}
+					})))
+				}
+				else
+				{
+					Some(Array(concat(arr, FillWithValues(i - length(arr), GetArrayDefaultElement(Array(arr))))))
+				}
+			})(index, newVal)
+		}
+		None(): None()
+	}
+}
+
+Apply(app : App, vars : Tree<string, NemoVariable>) -> Maybe<NemoVariable>
+{
+	index = GetIntFromNemoVar(GetNemoVarFromExpr(app.ind, vars));
+	maybeBind2(\arr, i ->
+	{
+		if (length(arr) > i && i >= 0)
+		{
+			Some(arr[i])
+		}
+		else
+		{
+			println("index out of range");
+			Some(GetArrayDefaultElement(Array(arr)))
+		}
+	})(GetArray(app.ar, vars), index)
+}
+
+CurrentState(label : int, vars : Tree<string, NemoVariable>);
+
+ExecuteState(instructions : [Instruction], state : CurrentState) -> Maybe<[CurrentState]>
+{
+	//returns pair of two maybes: new state tree and goto labels
+	pair = switch (instructions[state.label].state)
+	{
+		Assign(var, rhs, Goto): Pair(
+			AssignInstruction(Assign(var, rhs, Goto), state.vars),
+			Some(Goto)
+		)
+		
+		Cond(cond, trueGoto, falseGoto): Pair(
+			Some(state.vars),
+			ConditionInstruction(Cond(cond, trueGoto, falseGoto), state.vars)
+		)
+		
+		Print(val, Goto): Pair(
+			Some(state.vars),
+			maybeBind(PrintInstruction(val, state.vars), \s -> Some(Goto))
+		)
+	}
+
+	maybeBind2(\varTree, labels ->
+		Some(fold(labels, [], \acc, label ->
+		{
+			concat(acc, [CurrentState(label, varTree)])
+		}))
+	)(pair.first, pair.second)
+}
+
+Run(instructions : [Instruction], states : [CurrentState])
+{
+	for(states, \currentStates ->
+	{
+		len = length(currentStates);
+		len != 0 && forall(currentStates, \s -> s.label < len)
+	},
+	\istates ->
+	{
+		fold(istates, [], \acc, state ->
+		{
+			switch (ExecuteState(instructions, state))
+			{
+				Some(stateArr): concat(acc, stateArr)
+				None(): concat(acc, [])
+			}
+		})
+	});
+	
+}
+
+
+main()
+{
+	prog = "var x: int;\nvar y : [int];\nvar z : [[int]];\n0 : x = 10 goto { 1 };\n 1: if((x >= x)) {} else {};\n 2: print\n( x ) goto { 0 } ;";
+//	prog2 = "var x : int;\nvar y : int;\n0 : if((1 - 0)) {} else { 1 };"
+//	prog = getFileContent("test.nemobc");
+	println(prog);
+	programm = s2nem(prog);
+	println(programm);
+	decltree = DeclareVariables(programm.decl);
+	println(decltree);
+
+	Run(programm.instructions, [CurrentState(0, decltree)]);
+
+	// switch (lookupTree(decltree, "z"))
+	// {
+	// 	Some(v):
+	// 	{
+	// 		println(v);
+	// 		println(v.arrayOf[0]);
+	// 		array = Array(concat(v.arrayOf[0].arrayOf, [Int(11)]));
+	// 		arrayOfArray = Array([array]);
+
+	// 		decltree2 = setTree(decltree, "z", arrayOfArray);
+	// 		println(decltree2);
+	// 		switch (lookupTree(decltree2, "z"))
+	// 		{
+	// 			Some(vv):
+	// 			{
+	// 				println(vv);
+	// 				println(vv.arrayOf[0]);
+	// 			}
+	// 			None():
+	// 			{
+	// 				println("nope");
+	// 			}
+	// 		}
+	// 	}
+	// 	None():
+	// 	{
+	// 		println("nope");
+	// 	}
+	// }
+
+
+	// a = Programm([
+		// Declaration("x", Int),
+		// Declaration("y", Array()),  // ??? 
+		// Assigment("x", Number(3), [2]),
+		// Condition(NotEqual())
+	// ])
+	
+	
+	//println("llallalal");
+}
+
+
+//\n upd(x, app(x, 1), app(x, 2));
+
+// AlgOperator ::= VNemoPlus, VNemoMinus, VNemoMult, VNemoDiv, VNemoMod;
+// VNemoPlus(l: Int, r: Int);
+// VNemoMinus(l: Int, r: Int);
+// VNemoMult(l: Int, r: Int);
+// VNemoDiv(l: Int, r: Int);
+// VNemoMod(l: Int, r: Int);
+
+
+
+// BoolOperator ::= NotEqual, Equal, LessOrEqual, MoreOrEqual, Less, More;
+// NotEqual(l: Int, r: Int);
+// Equal(l: Int, r: Int);
+// LessOrEqual(l: Int, r: Int);
+// MoreOrEqual(l: Int, r: Int);
+// Less(l: Int, r: Int);
+// More(l: Int, r: Int);
+
+// Programm(decl: [Declaration], );
+
+/*
+GetIntFromExpr(ind : Expression, vars : Tree<string, NemoVariable>) -> Maybe<int>
+{
+	switch (GetNemoVarFromExpr(ind))
+	{
+		Some(nemovar):
+			Int(i):
+		{
+			Some(i)
+		}
+		Var(name):
+		{
+			switch (lookupTree(vars, name))
+			{
+				Some(nemovar):
+				{
+					switch (nemovar)
+					{
+						Int(intvar):
+						{
+							Some(intvar)
+						}
+						default:
+						{
+							println("type mismatch: apply requires array");
+							None()
+						}
+					}
+				}
+				default:
+				{
+					println("undefined symbol: " + name);
+					None()
+				}
+			}
+		}
+		App(app, intind):
+		{
+			switch (Apply(App(app, intind), vars))
+			{
+				Some(applied):
+				{
+					switch (applied)
+					{
+						Int(intapp): Some(intapp)
+						Array(arrapp):
+						{
+							println("array cannot be applied as int");
+							None()
+						}
+					}
+				}
+				None(): None()
+			}
+		}
+		BinOp(binOp, lhs, rhs):
+		{
+			Compute(ind, vars)
+		}
+		default:
+		{
+			println("array cannot be applied as int");
+			None()
+		}
+	}
+	None()
+}
+
+		{
+			switch (maybeBind2(\aa, bb -> Some(aa == bb))(left, right))
+			{
+				Some(res): Some(b2i(res))
+
+				None():
+				{
+					Some(leftNemoVar)
+					// leftarr = GetArrFromNemoVar(a);
+					// rightarr = GetArrFromNemoVar(b);
+					
+					// switch (maybeBind2(\aarr, barr ->
+					// {
+					// 	if (GetDimensions(aarr))
+		
+					// })(leftarr, rightarr))
+				}
+			}
+
+GetDimensions(var : NemoVariable) -> int
+{
+	switch (var)
+	{
+		Int(i): 0
+		Array(arr):
+		{
+			if (length(arr.arrayOf) > 0)
+			{
+				GetDimensions(arr.arrayOf[0]) + 1
+			}
+			else
+			{
+				1
+			}
+		}
+	}
+}
+*/

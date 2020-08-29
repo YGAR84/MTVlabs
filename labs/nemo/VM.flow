@@ -1,0 +1,489 @@
+import string;
+import lingo/pegcode/driver;
+import ds/tree;
+import math/math;
+import runtime;
+
+export 
+{
+	VMDecl(var: string, type: VMType);
+	VMType ::= VMIntType, VMArrayType;
+	VMIntType();
+	VMArrayType(type: VMType);
+	
+	VMProg(decl: [VMDecl], states: [VMState]);
+	
+	
+	VMExp ::= VMInt, VMVar, VMBinOp, VMApp, VMUpd;
+	
+	VMApp(ar: VMExp, ind: VMExp);
+	VMUpd(ar: VMExp, ind: VMExp, value: VMExp);
+
+	VMBinOp(op: string, lhs: VMExp, rhs: VMExp);
+	VMInt(value: int);
+	VMVar(name: string);
+
+
+	VMState ::= VMAssign, VMCond, VMPrint;
+	VMAssign(label: int, v: string, r: VMExp, Goto: [int]);
+	VMCond(label: int, op: string, lhs: VMExp, rhs: VMExp, If: [int], Else: [int]);
+	VMPrint(label: int, v: VMExp, Goto: [int]);
+	
+	VMStep(label: int, vars: Tree<string, VMVal>);
+	
+	VMVal ::= VMInt, VMValArray;
+	VMValArray(a: [VMVal]);
+
+	go(prog: VMProg) -> [VMStep];
+	
+	vmType2s(type: VMType) -> string;
+}
+
+
+vmType2s(type: VMType) -> string
+{
+	switch(type)
+	{
+		VMIntType(): "int";
+		VMArrayType(t): "[" + vmType2s(t) + "]";
+	}
+}
+
+
+buildArray(xs : [flow])
+{
+	arrayPush(xs[0], xs[1])
+}
+
+s2vm(s: string) -> VMProg 
+{
+	specialPegActions = {
+		t = setTree(defaultPegActions.t, "buildArray", buildArray);
+		SemanticActions(t);
+	};
+	gr = "#include VMGrammar.flow";
+	parsic(compilePegGrammar(gr), s, specialPegActions)
+}
+
+getDefaultValueOfType(type: VMType) -> VMVal
+{
+	switch(type)
+	{
+		VMIntType(): VMInt(0);
+		VMArrayType(t): VMValArray([]);
+	}
+}
+
+getStateByDecl(decl: [VMDecl]) -> Tree<string, VMVal>
+{
+	fold(decl, makeTree(), \acc, v -> 
+	{
+		setTree(acc, v.var, getDefaultValueOfType(v.type));
+	})
+}
+
+getIntFromVMVal(val: VMVal) -> int
+{
+	switch(val)
+	{
+		VMInt(v) : v;
+		VMValArray(arr) : 
+		{
+			quit(1);
+			0;
+		}
+	}
+}
+
+calc(binOp: VMBinOp, vars: Tree<string, VMVal>) -> int
+{
+	lval = getVMValFromVMExp(binOp.lhs, vars);
+	rval = getVMValFromVMExp(binOp.rhs, vars);
+	left = getIntFromVMVal(lval);
+	right = getIntFromVMVal(rval);
+	
+	if(binOp.op == "+")
+	{
+		left + right;
+	}
+	else if(binOp.op == "-")
+	{
+		left - right;
+	}
+	else if(binOp.op == "*")
+	{
+		left * right;
+	}
+	else if(binOp.op == "/")
+	{
+		left / right;
+	}
+	else if(binOp.op == "%")
+	{
+		left % right;
+	}
+	else
+	{
+		quit(1);
+		0;
+	}
+}
+
+doCond(cond: VMCond, vars: Tree<string, VMVal>) -> [int]
+{
+	left = getIntFromVMVal(getVMValFromVMExp(cond.lhs, vars));
+	right = getIntFromVMVal(getVMValFromVMExp(cond.rhs, vars));
+	
+	if(cond.op == "==")
+	{
+		if(left == right) cond.If
+		else cond.Else
+	}
+	else if (cond.op == "<=")
+	{
+		if(left <= right) cond.If
+		else cond.Else
+	}
+	else if (cond.op == ">=")
+	{
+		if(left >= right) cond.If
+		else cond.Else
+	}
+	else if (cond.op == "<")
+	{
+		if(left < right) cond.If
+		else cond.Else
+	}
+	else if (cond.op == ">")
+	{
+		if(left > right) cond.If
+		else cond.Else
+	}
+	else if (cond.op == "!=")
+	{
+		if(left != right) cond.If
+		else cond.Else
+	}
+	else
+	{
+		quit(1);
+		[]
+	}
+}
+
+getArrayOfValues(val: VMVal, num: int) -> [VMVal] 
+{
+	if(num <= 0) []
+	else concat([val], getArrayOfValues(val, num - 1))
+}
+
+
+update1(ar: VMVal, ind: VMExp, val: VMExp, vars : Tree<string, VMVal>) -> VMVal
+{
+	switch(ar)
+	{
+		VMValArray(arr):
+		{
+			index = getIntFromVMVal(getVMValFromVMExp(ind, vars));
+			if(index < 0)
+			{
+				quit(1);
+				VMInt(0);
+			}
+			else 
+			{
+				newVal = getVMValFromVMExp(val, vars);
+				if(index < length(arr))
+				{
+					VMValArray
+					(
+						foldi(arr, [], \i, acc, value ->
+						{
+							if(i == index)
+							{
+								concat(acc, [newVal])
+							}
+							else
+							{
+								concat(acc, [value])
+							}
+						})
+					)
+				}
+				else
+				{
+					VMValArray
+					(
+						concat(arr, getArrayOfValues(newVal, index - length(arr) + 1))
+					)
+				}
+			}
+		}
+		VMInt(i):
+		{
+			quit(1);
+			VMInt(0);
+		}
+	}
+}
+
+update(upd: VMUpd, vars : Tree<string, VMVal>) -> VMVal
+{
+	switch(upd.ar)
+	{
+		VMVar(n):
+		{
+			switch(lookupTree(vars, n))
+			{
+				Some(v):
+				{
+					update1(v, upd.ind, upd.value, vars)
+				}
+				None():
+				{
+					quit(1);
+					VMInt(0);
+				}
+			}
+		}
+		VMApp(a, i):
+		{
+			arr = apply(VMApp(a, i), vars);
+			update1(arr, upd.ind, upd.value, vars)
+		}
+		VMUpd(a, i, v):
+		{
+			arr = update(VMUpd(a, i, v), vars);
+			update1(arr, upd.ind, upd.value, vars)
+		}
+		default:
+		{
+			quit(1);
+			VMInt(0);
+		}
+	}
+}
+
+apply1(ar: VMVal, ind: VMExp, vars : Tree<string, VMVal>) -> VMVal
+{
+	switch(ar)
+	{
+		VMValArray(arr):
+		{
+			index = getIntFromVMVal(getVMValFromVMExp(ind, vars));
+			if(index >= length(arr) || index < 0)
+			{
+				quit(1);
+				VMInt(0);
+			}
+			else
+			{
+				arr[index]
+			}
+		}
+		VMInt(i): 
+		{
+			quit(1);
+			VMInt(0);
+		}
+	}
+}
+
+apply(app: VMApp, vars: Tree<string, VMVal>) -> VMVal
+{
+	switch(app.ar)
+	{
+		VMVar(n):
+		{
+			switch(lookupTree(vars, n))
+			{
+				Some(v):
+				{
+					apply1(v, app.ind, vars)
+				}
+				None():
+				{
+					quit(1);
+					VMInt(0);
+				}
+			}
+		}
+		VMApp(a, i):
+		{
+			arr = apply(VMApp(a, i), vars);
+			apply1(arr, app.ind, vars)
+		}
+		VMUpd(a, i, v):
+		{
+			arr = update(VMUpd(a, i, v), vars);
+			apply1(arr, app.ind, vars)
+		}
+		default:
+		{
+			quit(1);
+			VMInt(0);
+		}
+	}
+}
+
+
+getVMValFromVMExp(expr: VMExp, vars : Tree<string, VMVal>) -> VMVal
+{
+	switch(expr)
+	{
+		VMInt(v) : VMInt(v);
+		VMVar(v) : 
+		{
+			switch(lookupTree(vars, v))
+			{
+				Some(a) : a;
+				None():
+				{
+					quit(1);
+					VMInt(0);
+				}
+			}
+		}
+		VMBinOp(op, l, r): VMInt(calc(VMBinOp(op, l, r), vars));
+		VMApp(a, i): apply(VMApp(a, i), vars);
+		VMUpd(a, i, v): update(VMUpd(a, i, v), vars);
+	}
+}
+
+getStateByLabel(prog: VMProg, l: int) -> Maybe<VMState>
+{
+	if(l < length(prog.states)) Some(prog.states[l])
+	else None()
+}
+
+
+step(b: [VMStep], prog: VMProg) -> [VMStep]
+{
+	fold(b, [], \acc, v -> 
+	{
+		concat(acc, doStatementOnStep(v, prog))
+	})
+
+}
+
+go(prog: VMProg)
+{
+	//create begin state
+	
+	beginState = getStateByDecl(prog.decl);
+	
+	maxState = length(prog.states);
+	println(maxState);
+	
+	// create array for tree
+	
+	
+	
+	steps = [VMStep(
+		switch(prog.states[0])
+		{
+			VMAssign(l, va, r, g): l;
+			VMCond(l, op, lh, rh, i, e): l;
+			VMPrint(l, va, g): l;
+		}, 
+		beginState)];
+	
+	for(steps, \a -> 
+	{
+		//predicate end of go
+		length(a) != 0 && forall(a, \v -> v.label < maxState)
+		
+	},
+	\instep -> 
+	{
+		step(instep, prog);
+	})
+
+	
+}
+
+VMVal2s(vmVal: VMVal) -> string
+{
+	switch(vmVal)
+	{
+		VMInt(v): i2s(v);
+		VMValArray(arr):
+		{
+			"[" + strGlue(map(arr, \a -> VMVal2s(a)), ",") + "]";
+		}
+	}
+}
+
+
+doStatementOnStep(st: VMStep, prog: VMProg) -> [VMStep]
+{
+	switch(getStateByLabel(prog, st.label))
+	{
+		None() : [] ;
+		Some(v): 
+		{
+			switch(v)
+			{
+				VMAssign(l, va, r, g):
+				{
+					newState = setTree(st.vars, va, getVMValFromVMExp(r, st.vars)); 
+					fold(g, [], \acc, lab ->
+					{
+						concat(acc, [VMStep(lab, newState)])
+					})
+				}
+				VMCond(l, op, lh, rh, i, e):
+				{
+					fold(doCond(VMCond(l, op, lh, rh, i, e), st.vars), [], \acc, lab ->
+					{
+						concat(acc, [VMStep(lab, st.vars)])
+					})
+				}
+				VMPrint(l, va, g):
+				{
+					println(VMVal2s(getVMValFromVMExp(va, st.vars)));
+					fold(g, [], \acc, lab ->
+					{
+						concat(acc, [VMStep(lab, st.vars)])
+					})
+				}
+			}
+		}
+
+	}
+}
+
+
+vmExp2s(vmExp: VMExp)
+{
+	switch(vmExp)
+	{
+		VMInt(v) : i2s(v);
+		VMVar(v) : v;
+		VMApp(a, i) : "app(" + vmExp2s(a) + ", " + vmExp2s(i) + ")";
+		VMUpd(a, i, v) : "upd(" + vmExp2s(a) + ", " + vmExp2s(i) + ", " + vmExp2s(v) + ")";
+		VMBinOp(o, l, r) : "(" + vmExp2s(l) + " " + o + " " + vmExp2s(r) + ")";
+	}
+}
+
+// vmState2s(vmState: VMState) -> string
+// {
+	// switch(vmState)
+	// {
+		// VMAssign(l, v, r, g) : i2s(l) + ": " + v + " = " + vmExp2s(r) + " goto{" + strGlue(map(g, i2s), ", ") + "}";
+		// VMCond(l, o, l, r, if, el) : i2s(l) + ": if(" + vmExp2s(l) + " " + o + " " + vmExp2s(r) +  ") goto{" + strGlue(map(if, i2s), ", ") + "} goto{" + strGlue(map(el, i2s), ", ") + "}";
+		// VMPrint(l, e, g) : i2s(l) + ": print(" + vmExp2s(e) + ") goto{" + strGlue(map(g, i2s), ", ") + "}"; 
+	// }
+// }
+
+// vmProg2s(vmProg: VMProg) -> string
+// {
+	// declsString = strGlue(map(vmProg.decl, \v ->
+	// {
+		// "var " + v.var + " : " + vmType2s(v.type) + ";"
+	// }, "\n");
+	
+	// statesStrings = strGlue(map(vmProg.states, vmState2s), ";\n");
+	
+	// declsString + "\n\n" + statesStrings
+// }

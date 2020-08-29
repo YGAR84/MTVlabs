@@ -1,0 +1,52 @@
+prog = ws decl*:d ws body:b ws { NemoProg(:d, :b)};
+
+decl = ws "var" ws word:v ws ":" ws type:t ws ";" ws { VMDecl(:v, :t) };
+
+type = intType | arrayType;
+
+intType = "int" { VMIntType() };
+arrayType = "[" ws type:t ws "]" { VMArrayType(:t) };
+
+expr = int | app | upd | unOp | binOp | var;
+
+int = ws number:n { NemoInt(:n) };
+
+var = ws word:w { NemoVar(:w) };
+
+binOp = ws "(" ws expr:l ws algOp:s ws expr:r ws ")" ws { NemoBinOp(:s, :l, :r) };
+
+unOp = "-" ws expr:e ws { NemoUnOp(:e) };
+
+app = ws "app" ws "(" ws expr:arr ws "," ws expr:ind ws ")" ws { NemoApp(:arr, :ind)};
+
+upd = ws "upd" ws "(" ws expr:arr ws "," ws expr:ind ws "," ws expr:val ws ")" { NemoUpd(:arr, :ind, :val) };
+
+body = seq | print | test | parall | iter | assign | ifElse | while;
+
+assign = ws word:v ws ":=" ws expr:e ws { NemoAssign(:v, :e) };
+
+test = ws "(" expr:l ws boolOp:s ws expr:r ws ")" ws "?" ws { NemoTest(:s, :l, :r) };
+
+print = ws "print" ws "(" ws expr:e ws ")" ws { NemoPrint(:e)};
+
+seq = ws "{" ws body:b ws seqNext*:bs "}" ws { buildSeq(:b, :bs)};
+
+seqNext = ";" ws body:b ws { :b };
+
+parall = ws "{" ws body:b ws parallNext*:bp"}" ws { buildPar(:b, :bp) };
+parallNext = "|" ws body:b { :b };
+
+ifElse = ws "if" ws "(" ws expr:l ws boolOp:op ws expr:r ws ")" ws body:b1 ws "else" body:b2 ws { buildIfElse(:op, :l, :r, :b1, :b2)};
+
+while = ws "while" ws "(" ws expr:l ws boolOp:op ws expr:r ws ")" ws body:b ws { buildWhile(:op, :l, :r, :b)};
+
+iter = ws "*" ws body:b  ws { NemoIter(:b) };
+
+number = digit+ $s { s2i($s) };
+word = letter+ $s { $s };
+digit = '0' - '9';
+letter = 'a' - 'z';
+ws = (' ' | '\n' | '\r' | '\t' )*;
+
+boolOp = ("==" | "<=" | ">=" | "<" | ">" | "!=") $s { $s };
+algOp = ("+" | "*" | "/" | "-" | "%") $s { $s };

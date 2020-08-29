@@ -1,0 +1,27 @@
+import string;
+import ds/array;
+import ds/tree;
+
+f(a:[int], m:int)->Maybe<Pair<int, int>>{
+
+	b = fold(a, [], \acc, n -> concat(acc, [Pair(n, length(acc))]));
+	
+	t = setTreeValues(makeTree(), b);
+	
+	fold(b, None(), \acc, x -> {
+		switch(acc){
+			None() : {
+				mb = lookupTree(t, m - x.first);
+				ind = either(mb, 0);
+				if(isSome(mb)) Some(Pair(x.second, ind))
+				else acc
+			}
+			Some(v): acc
+		}
+
+	})
+}
+
+main() {
+	println(f([1,2,3,4,5,6], 12));
+}

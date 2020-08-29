@@ -1,0 +1,169 @@
+import string;
+import lingo/pegcode/driver;
+import ds/list;
+
+ArExp ::= ArPlus, ArMult, ArInt;
+ArPlus(lhs:ArExp, rhs:ArExp);
+ArMult(lhs:ArExp, rhs:ArExp);
+ArInt(val: int);
+
+ArRPN ::= OpRPN, ValRPN;
+ValRPN(val: int);
+OpRPN ::= PlusRPN, MultRPN;
+PlusRPN();
+MultRPN();
+
+ar2rpn(e: ArExp) -> [ArRPN]{
+	switch(e){
+		ArPlus(l, r): concat(concat(ar2rpn(l), ar2rpn(r)), [PlusRPN()]);
+		ArMult(l, r): concat(concat(ar2rpn(l), ar2rpn(r)), [MultRPN()]);
+		ArInt(v): [ValRPN(v)];
+	}
+}
+
+rpn2ar(e: [ArRPN]) -> Maybe<ArExp> {
+
+	apply_op = \op, st -> {
+		switch(st){
+			Cons(a1, t1):{
+				switch(t1){
+					Cons(a2, t2): Some(Cons(op(a1,a2), t2));
+					EmptyList(): None();
+				}
+			}
+			EmptyList(): None();
+		}
+	}
+	
+	
+	stak = fold(e, Some(makeList()), \acc, r -> {
+		maybeBind(acc, \ac -> {
+			switch(r){
+				ValRPN(v): Some(Cons(ArInt(v),ac));
+				OpRPN() : apply_op(\a1, a2 -> {
+					switch(r){
+						PlusRPN(): ArPlus(a1, a2);
+						MultRPN(): ArMult(a1, a2);
+					}
+				}, ac);
+			}
+		})
+	})
+	
+	switch(stak){
+		None(): None();
+		Some(v):{
+			if(countList(v) == 1) Some(headList(v, ArInt(0)))
+			else None()
+		}
+	}
+}
+
+rpn2arPos(e:[ArRPN]) -> Maybe<ArExp> {
+	switch(rpn2arpos(e, length(e) - 1)){
+		Some(v1): Some(v1.first);
+		None(): None();
+	}
+}
+
+rpn2arpos(e:[ArRPN], pos: int) -> Maybe<Pair<ArExp, int>> {
+
+
+	switch(e[pos])
+	{
+		ValRPN(v): Some(Pair(ArInt(v), 1));
+		PlusRPN(): 
+		{
+			switch(rpn2arpos(e, pos - 1))
+			{
+				Some(v1): switch(rpn2arpos(e, pos - v1.second - 1))
+				{
+					Some(v2): Some(Pair(ArPlus(v2.first, v1.first), v1.second + v2.second + 1));
+					None(): None();
+				}
+				None(): None()
+			}
+		}
+		MultRPN():
+		{
+			switch(rpn2arpos(e, pos - 1))
+			{
+				Some(v1): switch(rpn2arpos(e, pos - v1.second - 1))
+				{
+					Some(v2): Some(Pair(ArMult(v2.first, v1.first), v1.second + v2.second + 1));
+					None(): None();
+				}
+				None(): None()
+			}
+		}
+	}
+}
+
+rpn2i(e: [ArRPN]) -> Maybe<int>{
+
+	apply_op = \op, st -> {
+		switch(st){
+			Cons(a1, t1):{
+				switch(t1){
+					Cons(a2, t2): Some(Cons(op(a1,a2), t2));
+					EmptyList(): None();
+				}
+			}
+			EmptyList(): None();
+		}
+	}
+	
+	
+	stak = fold(e, Some(makeList()), \acc, r -> {
+		maybeBind(acc, \ac -> {
+			switch(r){
+				ValRPN(v): Some(Cons(v,ac));
+				OpRPN() : apply_op(\a1, a2 -> {
+					switch(r){
+						PlusRPN(): a1 + a2;
+						MultRPN(): a1 * a2;
+					}
+				}, ac);
+			}
+		})
+	})
+	
+	switch(stak){
+		None(): None();
+		Some(v):{
+			if(countList(v) == 1) Some(headList(v, 0))
+			else None()
+		}
+	}
+}
+
+ar2i(e: ArExp) -> int {
+	switch(e){
+		ArPlus(l, r): ar2i(l) + ar2i(r);
+		ArMult(l, r): ar2i(l) * ar2i(r);
+		ArInt(v): v;
+	}
+}
+
+ar2s(e: ArExp) -> string {
+	switch(e){
+		ArPlus(l, r): "(" + ar2s(l) + "+" + ar2s(r) + ")";
+		ArMult(l, r): "(" + ar2s(l) + "*" + ar2s(r) + ")";
+		ArInt(v): i2s(v);
+	}
+}
+
+s2ar(s: string) -> ArExp {
+	gr = "#include ../Grammar.flow";
+	parsic(compilePegGrammar(gr), s, defaultPegActions)
+}
+
+main(){
+	println(rpn2i([ValRPN(3), ValRPN(2), MultRPN(), ValRPN(1), PlusRPN()]));
+	
+	a = [ValRPN(3), ValRPN(2), MultRPN(), ValRPN(1), PlusRPN(), ValRPN(4), ValRPN(6), MultRPN(), PlusRPN()];
+	b = rpn2arPos(a);
+	println(b);
+	println(rpn2i(a));
+}
+

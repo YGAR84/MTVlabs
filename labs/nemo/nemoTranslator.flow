@@ -1,0 +1,531 @@
+import nemo;
+
+export
+{
+	nemoProg2VMProg(nemoProg: NemoProg) -> Maybe<VMProg>;
+	
+	translateAndExecute(filePath : string) -> void;
+	
+	checkTypesNemoProg(nemoProg: NemoProg) -> bool;
+	
+	getVarTypeTree(decl: [VMDecl]) -> Maybe<Tree<string, VMType>>;
+}
+
+getVarTypeTree(decl: [VMDecl]) -> Maybe<Tree<string, VMType>>
+{
+	fold(decl, Some(TreeEmpty()), \acc, v ->
+	{
+		switch(acc)
+		{
+			Some(a): 
+			{
+				switch(lookupTree(a, v.var))
+				{
+					Some(var) : 
+					{
+						println("Redefined variable: " + v.var);
+						None();
+					}
+					None() :
+					{
+						Some(setTree(a, v.var, v.type));
+					}
+				}
+			}
+			None(): None();
+		}
+	})
+}
+
+getNemoExprType(nemoExpr: NemoExpr, varTypeTree: Tree<string, VMType>) -> Maybe<VMType>
+{
+	switch(nemoExpr)
+	{
+		NemoInt(_) : Some(VMIntType());
+		NemoVar(v) : lookupTree(varTypeTree, v);
+		NemoApp(a, i):
+		{
+			switch(getNemoExprType(a, varTypeTree))
+			{
+				Some(type1):
+				{
+					switch(type1)
+					{
+						VMIntType(): 
+						{
+							println("a type in app is int");
+							println(nemoExpr);
+							None();
+						}
+						VMArrayType(subtype1):
+						{
+							switch(getNemoExprType(i, varTypeTree))
+							{
+								Some(type2):
+								{
+									if(type2 == VMIntType()) Some(subtype1)
+									else 			
+									{
+										println("Incorrect type of i in app");
+										println(nemoExpr);
+										None();
+									}
+								}
+								None(): 
+								{
+									println("Unable to define i int app");
+									println(nemoExpr);
+									None();
+								}
+							}
+						}
+					}
+				}
+				None(): 
+				{
+					println("Unable to define a int app");
+					println(nemoExpr);
+					None();
+				}
+			}
+		}
+		NemoUpd(a, i, v):
+		{
+			switch(getNemoExprType(a, varTypeTree))
+			{
+				Some(type1):
+				{
+					switch(type1)
+					{
+						VMIntType(): 
+						{
+							println("a type in app is int");
+							println(nemoExpr);
+							None();
+						}
+						VMArrayType(subtype1):
+						{
+							switch(getNemoExprType(v, varTypeTree))
+							{
+								Some(type3):
+								{
+									if(type3 == subtype1)
+									{
+										switch(getNemoExprType(i, varTypeTree))
+										{
+											Some(type2):
+											{
+												if(type2 == VMIntType()) Some(type1)
+												else 
+												{
+													println("Type of index is not int");
+													println(nemoExpr);
+													None();
+												}
+											}
+											None():
+											{
+												println("Cannot define type of index in upd");
+												println(nemoExpr);
+												None();
+											}
+										}
+									}
+									else  
+									{
+										println("Array type and value types are incorrect in upd");
+										println(nemoExpr);
+										None();
+									}
+								}
+								None(): 
+								{
+									println("Cannot define v type in upd");
+									println(nemoExpr);
+									None();
+								}
+
+							}
+						}
+					}
+				}
+				None(): 
+				{
+					println("Unable to define a int upd");
+					println(nemoExpr);
+					None();
+				}
+			}
+		}
+		// NemoApp(ar, in) :
+		// {
+			// maybeBind(getNemoExprType(ar, varTypeTree), \m1->
+			// {
+				// switch(m1)
+				// {
+					// VMIntType() : None();
+					// VMArrayType(type) :
+					// {
+						// maybeBind(getNemoExprType(in, varTypeTree), \m2->
+						// {
+							// switch(m2)
+							// {
+								// VMIntType(): Some(type);
+								// default: None();
+							// }
+						// })
+					// }
+				// }
+			// })
+		// }
+		// NemoUpd(ar, in, va) : 
+		// {
+			// maybeBind(getNemoExprType(ar, varTypeTree), \m1->
+			// {
+				// switch(m1)
+				// {
+					// VMIntType() : None();
+					// VMArrayType(t1) :
+					// {
+						// maybeBind(getNemoExprType(in, varTypeTree), \m2->
+						// {
+							// switch(m2)
+							// {
+								// VMIntType(): 
+								// {
+									// maybeBind(getNemoExprType(va, varTypeTree), \m3->
+									// {
+										// if(m3 == t1) { println("Type error in Upd"); Some(m3);}
+										// else None();
+									// })
+								// }
+								// default: None();
+							// }
+						// })
+					// }
+				// }
+			// })
+		// }
+		NemoUnOp(expr) : 
+		{
+			maybeBind(getNemoExprType(expr, varTypeTree), \m->
+			{
+				switch(m)
+				{
+					VMIntType(): Some(VMIntType());
+					default: 
+					{
+						println("Un op must be only with int types");
+						println(nemoExpr);
+						None();
+					}
+				}
+			})
+		}
+		NemoBinOp(o, l, r) : 
+		{
+			maybeBind(getNemoExprType(l, varTypeTree), \m1->
+			{
+				switch(m1)
+				{
+					VMIntType(): 
+					{
+						maybeBind(getNemoExprType(r, varTypeTree), \m2->
+						{
+							switch(m2)
+							{
+								VMIntType(): Some(VMIntType());
+								default: 
+								{
+									println("Bin op must be only with int types");
+									println(nemoExpr);
+									None();
+								}
+							}
+						})
+					}
+					default: 
+					{
+						println("Bin op must be only with int types");
+						println(nemoExpr);
+						None();
+					}
+				}
+			})
+		}
+	}
+}
+
+
+checkTypesNemoProg(nemoProg: NemoProg) -> bool 
+{
+	switch(getVarTypeTree(nemoProg.decl))
+	{
+		None(): 
+		{
+			false;
+		}
+		Some(varTypeTree):
+		{
+			checkTypesInBody(nemoProg.body, varTypeTree);
+		}
+	}
+}
+
+checkTypesInBody(nemoBody: NemoBody, varTypeTree: Tree<string, VMType>) -> bool
+{
+	switch(nemoBody)
+	{
+		NemoSeq(bs) : 
+		{
+			fold(bs, true, \acc, v ->
+			{
+				tmp = checkTypesInBody(v, varTypeTree);
+				if(!tmp)
+				{
+					println("Error in that body:");
+					println(v);
+					false;
+				}
+				else	acc && checkTypesInBody(v, varTypeTree)
+			})
+		}
+		NemoTest(op, l, r): 
+		{
+			switch(getNemoExprType(l, varTypeTree))
+			{
+				None(): 
+				{
+					println("Cannot define expr type in test");
+					println(nemoBody);
+					false;
+				}
+				Some(lt): 
+				{
+					switch(lt)
+					{
+						VMIntType(): 
+						{
+							switch(getNemoExprType(r, varTypeTree))
+							{
+								None():
+								{
+									println("Cannot define expr type in test");
+									println(nemoBody);
+									false;
+								}
+								Some(rt): 
+								{
+									switch(rt)
+									{
+										VMIntType(): true;
+										default: 
+										{
+											println("Expression typing failed in: ");
+											false;
+										}
+									}
+								}
+							}
+						}
+						default: 
+						{
+							println("Expression typing failed in: ");
+							false;
+						}
+					}
+				}
+			}
+		}
+		NemoPrint(e):
+		{
+			switch(getNemoExprType(e, varTypeTree))
+			{
+				Some(t) : true;
+				None() : 
+				{
+					println("Cannot define type:");
+					false;
+				}
+			}
+		}
+		NemoAssign(n, e) :
+		{
+			switch(lookupTree(varTypeTree, n))
+			{
+				None() : 
+				{
+					println("Variable " + n + " not defined");
+					false;
+				}
+				Some(t1):
+				{
+					switch(getNemoExprType(e, varTypeTree))
+					{
+						Some(t2):
+						{
+							if(t1 != t2) { println("Var " + n + " incorrect type"); false;}
+							else true;
+						}
+						None():
+						{
+							println("Cannot define expr in assign");
+							false;
+						}
+					}
+				}
+			}
+		}
+		NemoPar(bs):
+		{
+			fold(bs, true, \acc, v ->
+			{
+				acc && checkTypesInBody(v, varTypeTree);
+			})
+		}
+		NemoIter(b):
+		{
+			checkTypesInBody(b, varTypeTree);
+		}
+	}
+}
+
+nemoExpr2VMExp(nemoExpr: NemoExpr) -> VMExp
+{
+	switch(nemoExpr)
+	{
+		NemoInt(v) : VMInt(v);
+		NemoVar(v) : VMVar(v);
+		NemoApp(ar, in) : VMApp(nemoExpr2VMExp(ar), nemoExpr2VMExp(in));
+		NemoUpd(ar, in, va) : VMUpd(nemoExpr2VMExp(ar), nemoExpr2VMExp(in), nemoExpr2VMExp(va));
+		NemoUnOp(expr) : VMBinOp("-", VMInt(0), nemoExpr2VMExp(expr));
+		NemoBinOp(o, l, r) : VMBinOp(o, nemoExpr2VMExp(l), nemoExpr2VMExp(r));
+	}
+}
+
+getLengthOfNemoBody(nemoBody: NemoBody) -> int
+{
+	switch(nemoBody)
+	{
+		NemoSeq(bs) : 
+		{
+			fold(bs, 0, \acc, v ->
+			{
+				acc + getLengthOfNemoBody(v)
+			})
+		}
+		NemoTest(op, l, r): 1;
+		NemoPrint(e): 1;
+		NemoAssign(n, e) : 1;
+		NemoPar(bs):
+		{
+			1
+			+
+			fold(bs, 0, \acc, v ->
+			{
+				acc + getLengthOfNemoBody(v)
+			})
+		}
+		NemoIter(b):	2 + getLengthOfNemoBody(b);
+	}
+}
+
+getVMStateArrayByBody(beginLabel: int, lastLabel: int, nemoBody: NemoBody) -> [VMState]
+{
+	switch(nemoBody)
+	{
+		NemoSeq(bs):
+		{
+			foldi(bs, [], \i, acc, v ->
+			{
+				newBeginLabel = length(acc) + beginLabel;
+				if(i == length(bs) - 1)
+				{
+					if(lastLabel == -1)
+					{
+						concat(acc, getVMStateArrayByBody(newBeginLabel, newBeginLabel + getLengthOfNemoBody(v), v))
+					}
+					else
+					{
+						concat(acc, getVMStateArrayByBody(newBeginLabel, lastLabel, v))
+					}
+				}
+				else
+				{
+					concat(acc, getVMStateArrayByBody(newBeginLabel, newBeginLabel + getLengthOfNemoBody(v), v))
+				}
+				
+
+			})
+		}
+		NemoTest(op, l, r):
+		{
+			[VMCond(beginLabel, op, nemoExpr2VMExp(l), nemoExpr2VMExp(r), [lastLabel], [])];
+		}
+		NemoPrint(e):
+		{
+			[VMPrint(beginLabel, nemoExpr2VMExp(e), [lastLabel])];
+		}
+		NemoAssign(n, e):
+		{
+			[VMAssign(beginLabel, n, nemoExpr2VMExp(e), [lastLabel])];
+		}
+		NemoPar(bs):
+		{
+			newBegin = beginLabel + 1;
+			
+			result =  fold(bs, Pair([], []), \acc, v ->
+			{
+				newBeginLabel = length(acc.first) + newBegin;
+				
+				f = concat(acc.first, getVMStateArrayByBody(newBeginLabel, lastLabel, v));
+				s = concat(acc.second, [newBeginLabel]);
+				Pair(f, s);
+
+			})
+			
+			firstIf = VMCond(beginLabel, "==", VMInt(1), VMInt(1), result.second, []);
+			
+			concat([firstIf], result.first);
+		}
+		NemoIter(b):
+		{
+			bLength = getLengthOfNemoBody(b);
+			firstIf = VMCond(beginLabel, "==", VMInt(1), VMInt(1), [beginLabel + 1, bLength + beginLabel + 2], []);
+			
+			lastIf = VMCond(bLength + beginLabel + 1, "==", VMInt(1), VMInt(1), [beginLabel], []);
+			
+			newBegin = beginLabel + 1;
+			
+			concat3([firstIf], getVMStateArrayByBody(newBegin, lastLabel - 1, b), [lastIf]);
+		}
+	}
+}
+
+translateAndExecute(filePath : string) -> void
+{
+	file = getFileContent(filePath);
+	println(file + "\n");
+	nemoProg = s2nemo(file);
+	
+	switch(nemoProg2VMProg(nemoProg))
+	{
+		Some(prog): 
+		{
+			go(prog); 
+			println("Finished");
+		}
+		None() : println("Compilation failed");
+	}
+}
+
+nemoProg2VMProg(nemoProg : NemoProg) -> Maybe<VMProg>
+{
+	if(!checkTypesNemoProg(nemoProg))	None()
+	else
+	{
+		array = getVMStateArrayByBody(0, -1, nemoProg.body);
+		Some(VMProg(nemoProg.decl, array));
+	}
+	
+}

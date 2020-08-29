@@ -1,0 +1,13 @@
+import string;
+import ds/array;
+
+main() {
+	
+	a = [1, 2, 3, 5, 7, 8, 9];
+	
+	b = filter(a, \mat -> (mat % 2 == 0) );
+	
+	c = map(a,i2s);
+	strGlue(c, ",");
+	println(concat(c, a));
+}

@@ -1,0 +1,650 @@
+import nemoTranslator;
+import nemo;
+
+export
+{
+	AnodNemoProg(preCond: Formula, nemoProg: NemoProg, postCond: Formula, invs: Tree<NemoIter, Formula>);
+	
+	Formula ::= True, False, ElementalFormula, Negative, Conjunction, Disjunction, Implication, ForAll, Exists;
+	
+	True();
+	False();
+	Negative(form: Formula);
+	Conjunction(lhs: Formula, rhs: Formula);
+	Disjunction(lhs: Formula, rhs: Formula);
+	Implication(lhs: Formula, rhs: Formula);
+	Exists(name: string, form: Formula);
+	ForAll(name: string, form: Formula);
+	
+	ElementalFormula(rel: string, lhs: AnodTerm, rhs: AnodTerm);
+	
+	AnodTerm ::= Oper, AriphmTerm, FuncTerm;
+	
+	Oper ::= Var, Number;
+	Var(name: string);
+	Number(value: int);
+	
+	AriphmTerm(oper: string, lhs: AnodTerm, rhs: AnodTerm);
+	FuncTerm ::= App, Upd;
+	App(arr: AnodTerm, ind: AnodTerm);
+	Upd(arr: AnodTerm, ind: AnodTerm, val: AnodTerm);
+}
+
+
+gr = "#include nemoVerificatorGrammar.flow";
+
+s2anodNemo(s: string)-> AnodNemoProg 
+{
+
+	grammar = compilePegGrammar(gr);
+
+	invs = ref TreeEmpty();
+	
+	parsic(grammar, s, 
+		SemanticActions(
+			mergeTree(defaultPegActions.t,
+				pairs2tree([
+					Pair("buildPar", \bodies -> NemoPar(concat([bodies[0]], bodies[1])
+					)),
+					Pair("buildSeq", \bodies -> NemoSeq(concat([bodies[0]], bodies[1])
+					)),
+					Pair("buildIfElse", \bodies -> NemoPar([
+							NemoSeq([NemoTest(bodies[0], bodies[1], bodies[2]), bodies[3]]),
+							NemoSeq([NemoTest(antiBoolOp(bodies[0]), bodies[1], bodies[2]), bodies[4]])])
+					),
+					Pair("buildWhile", \bodies -> 
+					{
+						iteration = NemoIter(NemoSeq([NemoTest(bodies[0], bodies[1], bodies[2]), bodies[3]]));
+						while = NemoSeq([
+							iteration, 
+							NemoTest(antiBoolOp(bodies[0]), bodies[1], bodies[2])
+							]);
+						invs := setTree(^invs, iteration, bodies[4]);
+						while;
+					}
+					),
+					Pair("buildIter", \bodies -> 
+					{
+						iteration = NemoIter(bodies[0]);
+						invs := setTree(^invs, iteration, bodies[1]);
+						iteration;
+					}),
+					Pair("buildAnodNemoProg", \bodies -> AnodNemoProg(bodies[1], NemoProg(bodies[0], bodies[2]), bodies[3], ^invs))
+				])
+			)
+		)
+	)
+}
+
+
+// nemoExpr2anodTerm(nemoExpr: NemoExpr, vars: Tree<string, Nemo>) -> AnodTerm
+// {
+	// switch(nemoExpr)
+	// {
+		// NemoInt(v): Number(v);
+		// NemoApp(a, i): 
+	// }
+// }
+
+substVarInTerm(aTerm: AnodTerm, variable: string, iTerm: AnodTerm) -> AnodTerm
+{
+	switch(aTerm)
+	{
+		Var(v): 
+		{
+			if(v == variable) iTerm
+			else aTerm
+		}
+		Number(v) : Number(v);
+		AriphmTerm(op, l, r) : AriphmTerm(op, substVarInTerm(l, variable, iTerm), substVarInTerm(r, variable, iTerm));
+		App(a, i) : App(substVarInTerm(a, variable, iTerm), substVarInTerm(i, variable, iTerm));
+		Upd(a, i, v) : Upd(substVarInTerm(a, variable, iTerm), substVarInTerm(i, variable, iTerm), substVarInTerm(v, variable, iTerm));
+	}
+}
+
+nemoExpr2anodTerm(nemoExpr: NemoExpr) -> AnodTerm
+{
+	switch(nemoExpr)
+	{
+		NemoInt(v): Number(v);
+		NemoVar(v): Var(v);
+		NemoApp(a, i): App(nemoExpr2anodTerm(a), nemoExpr2anodTerm(i));
+		NemoUpd(a, i, v): Upd(nemoExpr2anodTerm(a), nemoExpr2anodTerm(i), nemoExpr2anodTerm(v));
+		NemoUnOp(e): AriphmTerm("-", Number(0), nemoExpr2anodTerm(e));
+		NemoBinOp(o, l, r): AriphmTerm(o, nemoExpr2anodTerm(l), nemoExpr2anodTerm(r));
+	}
+}
+
+substVarInFormula(ph: Formula, variable: string, iTerm: AnodTerm) -> Formula
+{
+	switch(ph)
+	{
+		True() : True();
+		False() : False();
+		ElementalFormula(r, t1, t2):
+		{
+			ElementalFormula(r, substVarInTerm(t1, variable, iTerm), substVarInTerm(t2, variable, iTerm))
+		}
+		Negative(f) : Negative(substVarInFormula(f, variable, iTerm));
+		Conjunction(f1, f2) : Conjunction(substVarInFormula(f1, variable, iTerm), substVarInFormula(f2, variable, iTerm));
+		Disjunction(f1, f2) : Disjunction(substVarInFormula(f1, variable, iTerm), substVarInFormula(f2, variable, iTerm));
+		Implication(f1, f2) : Implication(substVarInFormula(f1, variable, iTerm), substVarInFormula(f2, variable, iTerm));
+		Exists(d, f): Exists(d, substVarInFormula(f, variable, iTerm));
+		ForAll(d, f): ForAll(d, substVarInFormula(f, variable, iTerm));
+	}
+}
+
+
+AcForSeq(bs: [NemoBody], ph: Formula, invs: Tree<NemoIter, Formula>) -> Formula
+{
+	if(length(bs) == 1) Ac(bs[0], ph, invs)
+	else
+	{
+		Ac(bs[0], AcForSeq(tail(bs), ph, invs), invs)
+	}
+}
+
+AcForPar(bs: [NemoBody], ph: Formula, invs: Tree<NemoIter, Formula>) -> Formula
+{
+	if(length(bs) == 1) Ac(bs[0], ph, invs)
+	else
+	{
+		Conjunction(Ac(bs[0], ph, invs), AcForPar(tail(bs), ph, invs))
+	}
+}
+
+Ac(body: NemoBody, ph: Formula, invs: Tree<NemoIter, Formula>) -> Formula
+{
+	switch(body)
+	{
+		NemoSeq(bs):
+		{
+			AcForSeq(bs, ph, invs);
+		}
+		NemoTest(op, e1, e2):
+		{
+			Implication(ElementalFormula(op, nemoExpr2anodTerm(e1), nemoExpr2anodTerm(e2)), ph);
+		}
+		NemoPar(bs):
+		{
+			AcForPar(bs, ph, invs);
+		}
+		NemoIter(b):
+		{
+			switch(lookupTree(invs, body))
+			{
+				Some(in): in;
+				None() :
+				{
+					println("Cannot found invariant for iter");
+					True();
+				}
+			}
+		}
+		NemoAssign(n, e):
+		{
+			substVarInFormula(ph, n, nemoExpr2anodTerm(e));
+		}
+		NemoPrint(_): ph;
+	}
+}
+
+VcForSeq(bs: [NemoBody], ph: Formula, invs: Tree<NemoIter, Formula>) -> [Formula]
+{
+	if(length(bs) == 1) Vc(bs[0], ph, invs)
+	else
+	{
+		uniteFormulasSets( Vc(bs[0], AcForSeq(tail(bs), ph, invs), invs), VcForSeq(tail(bs), ph, invs) )
+	}
+
+}
+
+VcForPar(bs: [NemoBody], ph: Formula, invs: Tree<NemoIter, Formula>) -> [Formula]
+{
+	if(length(bs) == 1) Vc(bs[0], ph, invs)
+	else
+	{
+		uniteFormulasSets( Vc(bs[0], ph, invs), VcForPar(tail(bs), ph, invs))
+	}
+}
+
+
+Vc(body: NemoBody, ph: Formula, invs: Tree<NemoIter, Formula>) -> [Formula]
+{
+	switch(body)
+	{
+		NemoSeq(bs):
+		{
+			VcForSeq(bs, ph, invs);
+		}
+		NemoPar(bs):
+		{
+			VcForPar(bs, ph, invs);
+		}
+		NemoIter(b):
+		{
+			switch(lookupTree(invs, body))
+			{
+				Some(in): 
+				{
+					uniteFormulasSets(Vc(b, ph, invs), [Implication(in, ph), Implication(in, Ac(b, in, invs))])
+				}
+				None() : 
+				{
+					println("Cannot found invariant for iter");
+					[];
+				}
+			}
+		}
+		default(): [];
+	}
+}
+
+uniteFormulasSets(s1: [Formula], s2: [Formula]) -> [Formula]
+{
+	fold(s2, s1, \acc, v->
+	{
+		if(contains(acc, v)) acc
+		else concat(acc, [v])
+	})
+}
+
+getAnodTermType(t: AnodTerm, vTT: Tree<string, VMType>)->Maybe<VMType>
+{
+	switch(t)
+	{
+		Var(v): lookupTree(vTT, v);
+		Number(n) : Some(VMIntType());
+		AriphmTerm(_, t1, t2): 
+		{
+			switch(getAnodTermType(t1, vTT))
+			{
+				Some(type1):
+				{
+					if(type1 == VMIntType())
+					{
+						switch(getAnodTermType(t2, vTT))
+						{
+							Some(type2):
+							{
+								if(type2 == VMIntType()) Some(VMIntType())
+								else None()
+							}
+							None(): None();
+						}
+					}
+					else None()
+				}
+				None(): None();
+			}
+		}
+		App(a, i):
+		{
+			switch(getAnodTermType(a, vTT))
+			{
+				Some(type1):
+				{
+					switch(type1)
+					{
+						VMIntType(): None();
+						VMArrayType(subtype1):
+						{
+							switch(getAnodTermType(i, vTT))
+							{
+								Some(type2):
+								{
+									if(type2 == VMIntType()) Some(subtype1)
+									else None()
+								}
+								None(): None();
+							}
+						}
+					}
+				}
+				None(): None();
+			}
+		}
+		Upd(a, i, v):
+		{
+			switch(getAnodTermType(a, vTT))
+			{
+				Some(type1):
+				{
+					switch(type1)
+					{
+						VMIntType(): None();
+						VMArrayType(subtype1):
+						{
+							switch(getAnodTermType(v, vTT))
+							{
+								Some(type3):
+								{
+									if(type3 == subtype1)
+									{
+										switch(getAnodTermType(i, vTT))
+										{
+											Some(type2):
+											{
+												if(type2 == VMIntType()) Some(subtype1)
+												else None()
+											}
+											None(): None();
+										}
+									}
+									else None()
+								}
+								None(): None();
+							}
+						}
+					}
+				}
+				None(): None();
+			}
+		}
+	}
+}
+
+checkFormulasTypes(anp: AnodNemoProg) -> bool
+{
+	varTypeTree = getVarTypeTree(anp.nemoProg.decl);
+	switch(varTypeTree)
+	{
+		Some(vTT): 
+		{
+			foldTree(anp.invs, true, \k, v, acc ->
+			{
+				acc && checkFormula(v, vTT);
+			})
+			&&
+			checkFormula(anp.preCond, vTT) 
+			&& checkFormula(anp.postCond, vTT)
+		}
+		None(): false;
+	}
+}
+
+checkFormula(formula: Formula, vTT: Tree<string, VMType>) -> bool
+{
+	switch(formula)
+	{
+		Negative(f) : checkFormula(f, vTT);
+		Conjunction(f1, f2) : checkFormula(f1, vTT) && checkFormula(f2, vTT);
+		Disjunction(f1, f2) : checkFormula(f1, vTT) && checkFormula(f2, vTT);
+		Implication(f1, f2) : checkFormula(f1, vTT) && checkFormula(f2, vTT);
+		Exists(n, f) : 
+		{
+			switch(lookupTree(vTT, n))
+			{
+				Some(_) : checkFormula(f, vTT);
+				None(): 
+				{
+					println("Unable to find variable " + n );
+					false;
+				}
+			}
+		}
+		ForAll(n, f) : 
+		{
+			switch(lookupTree(vTT, n))
+			{
+				Some(_) : checkFormula(f, vTT);
+				None(): 
+				{
+					println("Unable to find variable " + n );
+					false;
+				}
+			}
+		}
+		ElementalFormula(op, t1, t2):
+		{
+			switch(getAnodTermType(t1, vTT))
+			{
+				Some(type1):
+				{
+					if(type1 != VMIntType()) false
+					else
+					{
+						switch(getAnodTermType(t2, vTT))
+						{
+							Some(type2):
+							{
+								if(type2 == VMIntType()) true
+								else false
+							}
+							None(): false;
+						}
+					}
+				}
+				None(): 
+				{
+					println("Cannot define term type");
+					false;
+				}
+			}
+		}
+		default: true;
+	}
+}
+
+checkTypesAnodProg(anp: AnodNemoProg) -> bool
+{
+	if(!checkTypesNemoProg(anp.nemoProg))
+	{
+		println("Some type problem in nemo prog");
+		false
+	}
+	else if(!checkFormulasTypes(anp))
+	{
+		println("Some type problem in formulas");
+		false
+	}
+	else
+	{
+		true
+	}
+}
+
+operator2z3(op: string) -> string
+{
+	if(op == "==")
+	{
+		"=";
+	}
+	else op;
+}
+
+anodTerm2z3(t: AnodTerm) -> string
+{
+	switch(t)
+	{
+		Number(n): i2s(n);
+		Var(v): v;
+		AriphmTerm(op, t1, t2): "( " + operator2z3(op) + " " + anodTerm2z3(t1) + " "  + anodTerm2z3(t2) + ")";
+		App(a, i) : "( select " + anodTerm2z3(a) + " " + anodTerm2z3(i) + ")";
+		Upd(a, i, v): "( store " + anodTerm2z3(a) + " " + anodTerm2z3(i) + " " + anodTerm2z3(v) + ")";
+	}
+}
+
+formula2z3(formula: Formula, decls: [VMDecl]) -> string 
+{
+	switch(formula)
+	{
+		True(): "true";
+		False(): "false";
+		Negative(f): "( not " + formula2z3(f,decls) + ")";
+		Conjunction(f1, f2): "( and " + formula2z3(f1, decls) + " " + formula2z3(f2, decls) + ")";
+		Disjunction(f1, f2): "( or " + formula2z3(f1, decls) + " " + formula2z3(f2, decls) + ")";
+		Implication(f1, f2): "( => " + formula2z3(f1, decls) + " " + formula2z3(f2, decls) + ")";
+		Exists(n, f): 
+		{
+			ttt = fold(decls, VMIntType(), \acc, v ->
+			{
+				if(v.var == n) v.type
+				else acc
+			});
+			"( ! (( " + n +  " " + vmType2z3(ttt) + " )) "+ formula2z3(f, decls) + ")";
+		}
+		ForAll(n, f): 
+		{
+			ttt = fold(decls, VMIntType(), \acc, v ->
+			{
+				if(v.var == n) v.type
+				else acc
+			});
+			"( forall (( " + n + " " + vmType2z3(ttt) + " )) "+ formula2z3(f, decls) + ")";
+		}
+		ElementalFormula(op, t1, t2): "( " + operator2z3(op) + " " + anodTerm2z3(t1) + " " + anodTerm2z3(t2) + ")";
+	}
+}
+
+assertNot2z3(formula: Formula, decls: [VMDecl]) -> string
+{
+	"( assert ( not " + formula2z3(formula, decls) + "))";
+}
+
+vmType2z3(type: VMType) -> string
+{
+	switch(type)
+	{
+		VMIntType(): "Int";
+		VMArrayType(t): "( Array " + vmType2z3(t) + " Int )";
+	}
+}
+
+vmDecl2z3(decl: VMDecl) -> string
+{
+	"(declare-const " + decl.var + " " + vmType2z3(decl.type) + ")";
+}
+
+getModel(formulas: [Formula], decls: [VMDecl]) -> string
+{
+	
+	formulasString = strGlue(map(formulas, \v->
+	{
+		assertNot2z3(v, decls)
+	}), "\n");
+	
+	
+	"\n\n(push)\n" + formulasString + "\n(pop)\n(get-model)\n\n"
+}
+
+allFormuals2z3(anp: AnodNemoProg) -> string
+{
+	formulas = createFormualsForZ3(anp);
+	
+	declString = strGlue(map(anp.nemoProg.decl, vmDecl2z3), "\n");
+
+	formulasString = strGlue(map(formulas, \v->
+	{
+		"\n(push)\n" +
+		assertNot2z3(v, anp.nemoProg.decl) +
+		"\n(check-sat)" +
+		"\n(get-model)" +
+		"\n(pop)\n"
+	}), "");
+	
+	declString + 
+	"\n\n" + formulasString + "\n\n" + "\n\n(exit)";
+}
+
+createFormualsForZ3(anp: AnodNemoProg) -> [Formula]
+{
+	ACFormula = Ac(anp.nemoProg.body, anp.postCond, anp.invs);
+	VCFormulas = Vc(anp.nemoProg.body, anp.postCond, anp.invs);
+	
+	concat(VCFormulas, [Implication(anp.preCond, ACFormula)])
+}
+
+
+AnodProgZ3Provert(anp: AnodNemoProg)
+{
+	z3Prog = allFormuals2z3(anp);
+	
+	println(z3Prog);
+	
+	result = setFileContent("progInZ3.z3", z3Prog);
+	if(result)
+	{
+		println("\nSuccessfully printed in file")
+	}
+	else
+	{
+		println("\nError ocuried in setFileContent");
+	}
+}
+
+
+
+main()
+{
+	//file = getFileContent("fibb.nemo");
+
+//	translateAndExecute("sqrt.nemo");
+
+	//anp = s2anodNemo(file);
+	
+	
+
+	// if(!checkTypesAnodProg(anp)){
+		
+		// println("ERROR!");
+		// {}
+	// }
+	// else
+	// {
+		translateAndExecute("fibb.nemo");
+		//AnodProgZ3Provert(anp);
+		// {}
+	// }
+	
+	
+	
+	// println(anp.preCond);
+	// println("");
+	// println(ACFormula);
+	// println("");
+	// println(anp.postCond);
+	// println("");
+	// fold(VCFormulas, [], \acc, v->
+	// {
+		// println(v);
+		// [];
+	// })
+	//println(VCFormulas);
+}
+
+
+// anodTerm2s(t: AnodTerm) -> string
+// {
+	// switch(t)
+	// {
+		// Number(n): i2s(n);
+		// Var(v): v;
+		// AriphmTerm(op, t1, t2): "( " + anodTerm2s(t1) + " " + op + " " + anodTerm2s(t2) + ")";
+		// App(a, i) : "( select " + anodTerm2s(a) + " " + anodTerm2s(i) + ")";
+		// Upd(a, i, v): "( store " + anodTerm2s(a) + " " + anodTerm2s(i) + " " + anodTerm2s(v) + ")";
+	// }
+// }
+
+
+// formula2z3(formula: Formula) -> string 
+// {
+	// switch(formula)
+	// {
+		// True(): "true";
+		// False(): "false";
+		// Negative(f): "!( " + formula2(f) + " )";
+		// Conjunction(f1, f2): "( " + formula2s(f1) + " & " + formula2s(f2) + " )";
+		// Disjunction(f1, f2): "( " + formula2s(f1) + " V " + formula2s(f2) + " )";
+		// Implication(f1, f2): "( " + formula2s(f1) + " -> " + formula2s(f2) + ")";
+		// Exists(n, f): 
+		// {
+			// "( E "  + n + " " + formula2s(f) + ")";
+		// }
+		// ForAll(n, f): 
+		// {
+			// "( A "  + n + " " + formula2s(f) + ")";
+		// }
+		// ElementalFormula(op, t1, t2): "( " + anodTerm2s(t1) + " " + op + " " + anodTerm2s(t2) + ")";
+	// }
+// }
