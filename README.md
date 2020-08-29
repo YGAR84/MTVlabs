@@ -1,1 +1,1 @@
-# Labs on course Methods of translation and verification in NSU
+# Laboratory work on the course "Methods of translation and compilation"
